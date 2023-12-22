@@ -1,5 +1,8 @@
 [package]
 name = "generic-bnp"
+description = "GenericBnP is a Branch & Price library for the programming language Rust. It supports custom cuts, dual stabilization, primal heuristics, and multithreaded evaluation."
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/gregod/GenericBnP"
 version = "0.1.0"
 edition = "2021"
 
@@ -17,12 +20,14 @@ gurobi = { version = "0.3.4", optional = true}
 
 [features]
 
-
+# Related to UI
 disable_ui = []
 buffered_out = []
 locked_out = []
 branch-graphviz = []
 
+# Expensive validity checks
 validity_assertions = []
+
 default = [ "gurobi" ]
 
