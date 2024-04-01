@@ -272,9 +272,10 @@ mod tests {
 
         fn is_column_forcing_filter(&self, filter: &Branch) -> Option<ColumnId> {
             if let Branch::ForceColumn(col_id, dir) = filter {
-                return Some(*col_id);
+                Some(*col_id)
+            } else {
+                None
             }
-            None
         }
 
         fn add_var_from_column(
