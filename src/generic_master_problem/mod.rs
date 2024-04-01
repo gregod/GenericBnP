@@ -620,9 +620,27 @@ pub trait UserMasterProblem<
     }
 
     fn get_ui(&self) -> &UISender;
-    fn get_lds_settings(&self) -> &LDSSettings;
+    fn get_lds_settings(&self) -> &LDSSettings {
+        &LDSSettings {
+            columns_to_fix_each_iteration: 0,
+            selection: LDSSelection::ClosestToOne,
+            max_depth: 0,
+            max_discrepancy: 0,
+            early_termination_after_bound_leq: 0,
+            do_only_lds: false,
+        }
+    }
+
     fn get_periodic_integer_solve_interval(&self) -> &Option<usize> { &None }
-    fn get_stabilization_settings(&self) -> &StabilizationSettings;
+    fn get_stabilization_settings(&self) -> &StabilizationSettings {
+        &StabilizationSettings {
+            cross_iteration_memory: false,
+            initial_smoothing_alpha: 0.0,
+            maximum_smoothing_alpha: 0.0,
+            alpha_steps_up: 0.0,
+            alpha_steps_down: 0.0,
+        }
+    }
 
     /// Return a custom branching filter that represents
     /// forcing a column to be either used or not be used

@@ -241,26 +241,7 @@ mod tests {
             &self.ui
         }
 
-        fn get_lds_settings(&self) -> &LDSSettings {
-            &LDSSettings {
-                columns_to_fix_each_iteration: 0,
-                selection: LDSSelection::ClosestToOne,
-                max_depth: 0,
-                max_discrepancy: 0,
-                early_termination_after_bound_leq: 0,
-                do_only_lds: false,
-            }
-        }
 
-        fn get_stabilization_settings(&self) -> &StabilizationSettings {
-            &StabilizationSettings {
-                cross_iteration_memory: false,
-                initial_smoothing_alpha: 0.9,
-                maximum_smoothing_alpha: 0.99,
-                alpha_steps_up: 0.0,
-                alpha_steps_down: 0.1,
-            }
-        }
 
         fn create_column_forcing_filter(
             &self,
