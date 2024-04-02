@@ -653,8 +653,8 @@ pub trait UserMasterProblem<
     /// Return iterator selecting the ones to add to the master problem
     ///
     /// Default implementation selecting the first is provided.
-    fn filter_columns_to_add_per_iteration(&self, new_paths: Vec<(f64, ColumnType)>, env: &mut Env, solver: &PricingSolver) -> Box<dyn Iterator<Item=(f64, ColumnType)>> {
-        Box::new(new_paths.into_iter().take(1))
+    fn filter_columns_to_add_per_iteration(&self, new_paths: Vec<(f64, ColumnType)>, env: &mut Env, solver: &PricingSolver) -> impl Iterator<Item=(f64, ColumnType)> {
+        new_paths.into_iter().take(1)
     }
 
 
