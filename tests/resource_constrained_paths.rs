@@ -5,7 +5,7 @@
 #[cfg(test)]
 mod tests {
     use generic_bnp::branch::BranchGroup;
-    use generic_bnp::column_pool::{ ColumnId, ColumnPool, ColumnPoolFilter, ColumnTicket};
+    use generic_bnp::column_pool::{Column, ColumnId, ColumnPool, ColumnPoolFilter, ColumnTicket};
 
     use generic_bnp::misc::{FullHashMap, HashMap};
     use generic_bnp::solvers::gurobi::GurobiEnv;
@@ -30,14 +30,14 @@ mod tests {
     }
 
 
-    impl<'a> UserPricingSolver<ShortestPathsProblem, Branch, Column, DualStorage> for PricingSolver {
+    impl<'a> UserPricingSolver<ShortestPathsProblem, Branch, ColumnData, DualStorage> for PricingSolver {
         fn new(problem_instance: &ShortestPathsProblem, ui: UISender) -> Self {
             PricingSolver {
                 instance: problem_instance.clone(),
                 ui,
             }
         }
-        fn solve(&mut self, active_filters: &[Branch], duals: &DualStorage) -> Vec<(f64, Column)> {
+        fn solve(&mut self, active_filters: &[Branch], duals: &DualStorage) -> Vec<(f64, ColumnData)> {
             
 
             // create local copy of graph to apply branching constraints
@@ -124,7 +124,7 @@ mod tests {
                     .map(|e| u32::from(local_graph[*e].time))
                     .sum();
 
-                let column = Column {
+                let column = ColumnData {
                     path: result_path.iter().map(|e| *e).collect(),
                     time: time_sum,
                     cost: cost_sum,
@@ -137,11 +137,11 @@ mod tests {
             }
         }
 
-        fn primal_cost_column(&self, column: &Column) -> f64 {
+        fn primal_cost_column(&self, column: &ColumnData) -> f64 {
             f64::from(column.cost)
         }
 
-        fn price_column_with_duals(&self, column: &Column, duals: &DualStorage) -> f64 {
+        fn price_column_with_duals(&self, column: &ColumnData, duals: &DualStorage) -> f64 {
             // run cost function on existing column and dual object
             column
                     .path
@@ -185,7 +185,7 @@ mod tests {
     }
 
     #[derive(PartialEq, Eq, Hash, Clone, Debug)]
-    struct Column {
+    struct ColumnData {
         path: Vec<EdgeIndex>,
         cost: u32,
         time: u32,
@@ -249,7 +249,7 @@ mod tests {
         UserMasterProblem<
             ShortestPathsProblem,
             PricingSolver,
-            Column,
+            ColumnData,
             DualStorage,
             ModelMeta,
             Branch,
@@ -271,7 +271,7 @@ mod tests {
             &self.ui
         }
 
-        fn get_stabilization_settings(&self) -> &generic_bnp::StabilizationSettings {
+        fn get_stabilization_settings(&self) -> &StabilizationSettings {
             &StabilizationSettings {
                 cross_iteration_memory: false,
                 initial_smoothing_alpha: 0.90,
@@ -330,7 +330,7 @@ mod tests {
             &self,
             _solver: &PricingSolver,
             _active_filters: &[Branch],
-            column_pool: &ColumnPool<Column, Branch>,
+            column_pool: &ColumnPool<ColumnData, Branch>,
             patterns: &Vec<(f64, ColumnId)>,
         ) -> Vec<BranchGroup<Branch, BranchGroupType>> {
             
@@ -373,7 +373,7 @@ mod tests {
 
         fn create_column_forcing_filter(
             &self,
-            column: &generic_bnp::column_pool::Column<Column>,
+            column: &Column<ColumnData>,
             direction: bool,
         ) -> Branch {
             // return non-generic branch type
@@ -401,7 +401,7 @@ mod tests {
 
         fn add_var_from_column(
             &self,
-            col: &generic_bnp::column_pool::Column<Column>,
+            col: &Column<ColumnData>,
             master: &mut gurobi::Model,
             model_meta: &ModelMeta,
             _solver: &PricingSolver,
@@ -461,8 +461,8 @@ mod tests {
         }
     }
 
-    impl ColumnPoolFilter<Column, Branch> for ColumnPool<Column, Branch> {
-        fn filter_columns<'a>(&self, filters: &[Branch], columns: impl Iterator<Item=&'a generic_bnp::column_pool::Column<Column>>) -> impl Iterator<Item=&'a generic_bnp::column_pool::Column<Column>> {
+    impl ColumnPoolFilter<ColumnData, Branch> for ColumnPool<ColumnData, Branch> {
+        fn filter_columns<'a>(&self, filters: &[Branch], columns: impl Iterator<Item=&'a Column<ColumnData>>) -> impl Iterator<Item=&'a Column<ColumnData>> {
             columns.filter(move |col| {
                 for filter in filters {
                     match filter {
@@ -527,7 +527,7 @@ mod tests {
         // create column pool and add expensive initialy dummy column
 
         let mut column_pool = ColumnPool::new();
-        let dummy_column = Column {
+        let dummy_column = ColumnData {
             cost: 100,
             time: 0,
             path: vec![],
@@ -538,7 +538,7 @@ mod tests {
 
         let bnp: BranchAndPrice<
             Branch,
-            Column,
+            ColumnData,
             DualStorage,
             ModelMeta,
             BranchGroupType,
