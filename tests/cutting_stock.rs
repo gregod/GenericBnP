@@ -378,26 +378,6 @@ mod tests {
 
 
     impl ColumnPoolFilter<Column, Branch> for ColumnPool<Column, Branch> {
-        fn get_columns(
-            &self,
-            filters: &[Branch],
-            ticket: Option<ColumnTicket>,
-        ) -> (ColumnTicket, Vec<&generic_bnp::column_pool::Column<Column>>) {
-            // if we have an inbound ticket: only get those columns after the ticket
-            let (new_ticket, iter) = {
-                let (tick, iter) = self.get_all_columns();
-                (
-                    tick,
-                    iter.skip(if let Some(ticket) = ticket {
-                        ticket.0
-                    } else {
-                        0
-                    }),
-                )
-            };
-
-            return (new_ticket, iter.collect());
-        }
     }
 
     #[test]

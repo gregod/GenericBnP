@@ -462,8 +462,8 @@ mod tests {
     }
 
     impl ColumnPoolFilter<Column, Branch> for ColumnPool<Column, Branch> {
-        fn filter_columns<'a>(&self, filters: &[Branch], columns: impl Iterator<Item=&'a generic_bnp::column_pool::Column<Column>>) -> Vec<&'a generic_bnp::column_pool::Column<Column>> {
-            columns.filter(|col| {
+        fn filter_columns<'a>(&self, filters: &[Branch], columns: impl Iterator<Item=&'a generic_bnp::column_pool::Column<Column>>) -> impl Iterator<Item=&'a generic_bnp::column_pool::Column<Column>> {
+            columns.filter(move |col| {
                 for filter in filters {
                     match filter {
 
@@ -484,7 +484,7 @@ mod tests {
                 }
 
                 return true;
-            }).collect()
+            })
         }
     }
 

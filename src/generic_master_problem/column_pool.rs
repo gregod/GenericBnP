@@ -55,7 +55,7 @@ pub trait ColumnPoolFilter<ColumnType, FilterType> : ColumnExporter<ColumnType> 
 
     /// This is the master function that is also dealing with ticket handling
     /// You likely want to override the function filter_columns only.
-    fn get_columns(&self, filters: &[FilterType], ticket : Option<ColumnTicket>) -> (ColumnTicket, Vec<&Column<ColumnType>>) {
+    fn get_columns<'a>(&'a self, filters: &[FilterType], ticket : Option<ColumnTicket>) -> (ColumnTicket, impl Iterator<Item=&'a Column<ColumnType>>) where ColumnType: 'a {
                 // if we have an inbound ticket: only get those columns after the ticket
                 let (new_ticket, iter) = {
                     let (tick, iter) = self.get_all_columns();
@@ -77,8 +77,8 @@ pub trait ColumnPoolFilter<ColumnType, FilterType> : ColumnExporter<ColumnType> 
 
     /// Override this function to implement filtering of the column pool based on the branches filters
     /// The default implementation performs no filtering at all
-    fn filter_columns<'a>(&self, filters: &[FilterType], columns : impl Iterator<Item=&'a Column<ColumnType>>) -> Vec<&'a Column<ColumnType>> {
-        return columns.collect()
+    fn filter_columns<'a>(&self, filters: &[FilterType], columns : impl Iterator<Item=&'a Column<ColumnType>>) -> impl Iterator<Item=&'a Column<ColumnType>> where ColumnType : 'a {
+        return columns;
     }
 }
 
