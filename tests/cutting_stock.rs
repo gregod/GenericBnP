@@ -4,21 +4,20 @@
 #[cfg(test)]
 mod tests {
     use generic_bnp::branch::BranchGroup;
-    use generic_bnp::column_pool::{ColumnId, ColumnPool, ColumnPoolFilter, ColumnTicket, ColumnExporter};
+    use generic_bnp::column_pool::{ColumnId, ColumnPool, ColumnPoolFilter, ColumnTicket};
 
     use generic_bnp::misc::{FullHashMap, HashMap};
     use generic_bnp::solvers::gurobi::GurobiEnv;
     use generic_bnp::{
-        BnPFactory, BranchAndPrice, IBranchFilter, LDSSelection, LDSSettings, LPModel,
-        MasterProblem, Phase, SharedState, StabilizationSettings, UISender, UIUserMessage,
+        BnPFactory, BranchAndPrice, IBranchFilter, LPModel, UISender,
         UserDualStore, UserMasterProblem, UserModelMeta, UserPricingSolver, INT_FEAS_TOL, UI,
     };
     use gurobi::{Constr, ConstrSense, Less, LinExpr, Maximize, Model, Var, VarType};
     use itertools::Itertools;
     use std::borrow::Cow;
-    use std::cmp::Ordering;
+    
     use std::fmt::{Debug, Display, Formatter};
-    use std::sync::{Arc, RwLock};
+    use std::sync::{RwLock};
 
     struct PricingSolver {
         instance: CuttingStockProblem,
@@ -120,7 +119,7 @@ mod tests {
     }
 
     impl UserDualStore for DualStorage {
-        fn linear_combination<'a, 'b>(&'b self, alpha: f64, out_duals: &'a Self) -> Cow<'a, Self> {
+        fn linear_combination<'a>(&self, alpha: f64, out_duals: &'a Self) -> Cow<'a, Self> {
             if alpha < INT_FEAS_TOL {
                 return Cow::Borrowed(out_duals);
             }
@@ -133,7 +132,7 @@ mod tests {
             for self_size in &self.sizes {
                 let other_value = out_duals.sizes[self_size.0];
                 out.insert(
-                    self_size.0.clone(),
+                    *self_size.0,
                     self_size.1 * alpha + other_value * (1.0 - alpha),
                 );
             }
@@ -305,7 +304,7 @@ mod tests {
 
             for item in &self.instance.demand_for_pieces {
                 constr.insert(
-                    item.size.clone(),
+                    item.size,
                     master
                         .add_constr(
                             &format!("demand_for_{:?}", item.size),
@@ -332,7 +331,7 @@ mod tests {
         ) -> Result<(), ()> {
             for filter in active_filters {
                 if let Branch::ForceColumn(col, dir) = filter {
-                    if let Some(var) = model_meta.column_vars.get(&col) {
+                    if let Some(var) = model_meta.column_vars.get(col) {
                         master
                             .add_constr(
                                 &format!("forceColumnActive[{:?}]", col),
@@ -359,7 +358,7 @@ mod tests {
             let dual_vec: FullHashMap<PieceSize, f64> = model_meta
                 .demand_constr
                 .iter()
-                .map(|(size, constr)| (size.clone(), master.get_dual_list(&[constr.clone()])[0]))
+                .map(|(size, constr)| (*size, master.get_dual_list(&[constr.clone()])[0]))
                 .collect();
 
             DualStorage { sizes: dual_vec }
@@ -372,7 +371,7 @@ mod tests {
             column_pool: &ColumnPool<Column, Branch>,
             patterns: &Vec<(f64, ColumnId)>,
         ) -> Vec<BranchGroup<Branch, BranchGroupType>> {
-            return Vec::default();
+            Vec::default()
         }
     }
 

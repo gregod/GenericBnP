@@ -7,7 +7,7 @@ pub struct ColumnId(pub u32);
 
 impl std::hash::Hash for ColumnId {
     fn hash<H: std::hash::Hasher>(&self, hasher: &mut H) {
-        hasher.write_u32(self.0)
+        hasher.write_u32(self.0);
     }
 }
 
@@ -34,8 +34,14 @@ pub struct ColumnPool<ColumnType, FilterType> {
     phantom: PhantomData<FilterType>,
 }
 
+impl<ColumnType, FilterType> Default for ColumnPool<ColumnType, FilterType> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<ColumnType, FilterType> ColumnPool<ColumnType, FilterType> {
-    pub fn new() -> Self {
+    #[must_use] pub fn new() -> Self {
         ColumnPool {
             local_column_counter: 0,
             columns: Vec::new(),
@@ -54,7 +60,7 @@ pub trait ColumnExporter<ColumnType> {
 pub trait ColumnPoolFilter<ColumnType, FilterType> : ColumnExporter<ColumnType> {
 
     /// This is the master function that is also dealing with ticket handling
-    /// You likely want to override the function filter_columns only.
+    /// You likely want to override the function `filter_columns` only.
     fn get_columns<'a>(&'a self, filters: &[FilterType], ticket : Option<ColumnTicket>) -> (ColumnTicket, impl Iterator<Item=&'a Column<ColumnType>>) where ColumnType: 'a {
                 // if we have an inbound ticket: only get those columns after the ticket
                 let (new_ticket, iter) = {
@@ -92,12 +98,12 @@ impl<ColumnType,FilterType> ColumnExporter<ColumnType> for ColumnPool<ColumnType
 impl<ColumnType, FilterType> ColumnPool<ColumnType, FilterType> {
 
     /// Total number of columns in pool
-    pub fn count(&self) -> usize {
+    #[must_use] pub fn count(&self) -> usize {
         self.columns.len()
     }
 
     /// Returns a specific column from the pool
-    pub fn get_column(&self, id: ColumnId) -> &Column<ColumnType> {
+    #[must_use] pub fn get_column(&self, id: ColumnId) -> &Column<ColumnType> {
         let column_at_index = &self.columns[id.0 as usize];
 
         // make sure that our assumption that columns are ordered in the column pool is correct
@@ -111,7 +117,7 @@ impl<ColumnType, FilterType> ColumnPool<ColumnType, FilterType> {
 
 
     /// Adds a column to the column pool
-    /// The `column_ticket` that was handed out during get_columns 
+    /// The `column_ticket` that was handed out during `get_columns` 
     /// must be returned, to ensure column pool consistency in a 
     /// multithreaded environment
     pub fn add_column(&mut self, column_data: ColumnType, column_ticket: ColumnTicket) -> bool
@@ -131,9 +137,7 @@ impl<ColumnType, FilterType> ColumnPool<ColumnType, FilterType> {
             .columns
             .iter()
             .enumerate() // uses enumerate and indecies due to lifetime constraints
-            .skip(column_ticket.0)
-            .filter_map(|( i ,c)| if c.data == column_data { Some(i)} else { None})
-            .next();
+            .skip(column_ticket.0).find_map(|( i ,c)| if c.data == column_data { Some(i)} else { None});
 
 
         if let Some(column) = existing_column {

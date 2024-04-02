@@ -16,7 +16,7 @@ impl LPEnv for GurobiEnv {
     }
 
     fn set_time_limit(&mut self, seconds: f64) {
-        self.0.set(param::TimeLimit, seconds).unwrap()
+        self.0.set(param::TimeLimit, seconds).unwrap();
     }
 
 

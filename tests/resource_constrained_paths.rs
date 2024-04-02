@@ -18,7 +18,7 @@ mod tests {
     use std::borrow::Cow;
     use std::fmt::{Debug, Display, Formatter};
     use std::hash::Hash;
-    use std::sync::RwLock;
+    
 
 
     use petgraph::algo::simple_paths;
@@ -79,7 +79,7 @@ mod tests {
         convexity: f64,
     }
     impl UserDualStore for DualStorage {
-        fn linear_combination<'a, 'b>(&'b self, alpha: f64, out_duals: &'a Self) -> Cow<'a, Self> {
+        fn linear_combination<'a>(&self, alpha: f64, out_duals: &'a Self) -> Cow<'a, Self> {
             if alpha < INT_FEAS_TOL {
                 return Cow::Borrowed(out_duals);
             }
@@ -230,7 +230,7 @@ mod tests {
 
 
             // for now -> just find first one that is fractional
-            let first_fractional = edge_hash.iter().filter(|v| v.1.fract() > 0.0).next();
+            let first_fractional = edge_hash.iter().find(|v| v.1.fract() > 0.0);
 
             
             if let Some((edge, _value)) = first_fractional {
@@ -319,7 +319,7 @@ mod tests {
         ) -> Result<(), ()> {
             for filter in active_filters {
                 if let Branch::ForceColumn(col, dir) = filter {
-                    if let Some(var) = model_meta.column_vars.get(&col) {
+                    if let Some(var) = model_meta.column_vars.get(col) {
                         master
                             .add_constr(
                                 &format!("forceColumnActive[{:?}]", col),
@@ -345,7 +345,7 @@ mod tests {
                     match filter {
 
                         Branch::ForceColumn(filter_col, dir) => {
-                            if *filter_col == col.id && *dir == false {
+                            if *filter_col == col.id && !(*dir) {
                                 // skip column if explicitly removed
                                 return  false;
                             }
@@ -360,7 +360,7 @@ mod tests {
                     }
                 }
 
-                return true;
+                true
             })
         }
     }
@@ -391,7 +391,7 @@ mod tests {
             for filter in active_filters {
                 match filter {
                     Branch::ForceEdge(edge, dir) => {
-                        if *dir == true {
+                        if *dir {
                             // if we must take an edge -> find all other edges leaving that node and remove them.
 
                             let edge_nodes = local_graph.edge_endpoints(*edge).unwrap();
@@ -472,7 +472,7 @@ mod tests {
                     .sum();
 
                 let column = ColumnData {
-                    path: result_path.iter().map(|e| *e).collect(),
+                    path: result_path.to_vec(),
                     time: time_sum,
                     cost: cost_sum,
                 };

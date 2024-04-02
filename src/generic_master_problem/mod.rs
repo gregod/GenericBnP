@@ -16,7 +16,7 @@ use crate::column_pool::{Column, ColumnPoolFilter};
 pub mod branch;
 pub mod column_pool;
 
-/// Factory used for LPModels
+/// Factory used for `LPModels`
 pub trait LPEnv: Sized {
     fn new_with_seed(seed: i32) -> Self;
     fn set_time_limit(&mut self, seconds: f64);
@@ -121,17 +121,17 @@ impl<
         pricing_solver: Solver,
     ) -> Self {
         MasterProblem {
-            _bpt: PhantomData::default(),
+            _bpt: PhantomData,
             pricing_solver,
             shared,
             user_problem: master_problem,
-            _mm: PhantomData::default(),
-            _ds: PhantomData::default(),
+            _mm: PhantomData,
+            _ds: PhantomData,
 
-            _cs: PhantomData::default(),
-            _ev: PhantomData::default(),
-            _md: PhantomData::default(),
-            _vr: PhantomData::default(),
+            _cs: PhantomData,
+            _ev: PhantomData,
+            _md: PhantomData,
+            _vr: PhantomData,
             _pi : PhantomData
         }
     }
@@ -175,12 +175,12 @@ impl<
             // test if we can still be better than the best found solution
             if self.user_problem.is_a_cutoff_by_bound_b(&branch.old_obj_bound, &curr_integer_best)
                 || branch.old_obj_bound > consider_infeasible_over
-                || (matches!(branch.special, Some(SpecialType::LDSBranch{..})) && curr_integer_best <= self.user_problem.get_lds_settings().early_termination_after_bound_leq as f64)
+                || (matches!(branch.special, Some(SpecialType::LDSBranch{..})) && curr_integer_best <= f64::from(self.user_problem.get_lds_settings().early_termination_after_bound_leq))
             {
                 let some_root_node = match branch.special {
                     Some(SpecialType::LDSBranch { ref taboo_filters }) => {
                         // root lds branch has discrepancy + depth == 0
-                        taboo_filters.len() == 0 && branch.depth == 0
+                        taboo_filters.is_empty() && branch.depth == 0
                     }
                     Some(SpecialType::Root) => true,
                     _ => false
@@ -207,12 +207,12 @@ impl<
                 num_filters: branch.filters.len(),
                 last_filter: {
                     if let Some(filter) = branch.filters.last() {
-                        format!("{}", filter)
+                        format!("{filter}")
                     } else {
                         "-".to_string()
                     }
                 },
-                special: branch.special.clone().map(|s| format!("{}", s)).unwrap_or("-".to_string()),
+                special: branch.special.clone().map_or("-".to_string(), |s| format!("{s}")),
                 before_obj: branch.old_obj_bound,
                 after_obj: None,
                 best_obj: curr_integer_best,
@@ -239,7 +239,7 @@ impl<
                     branch.old_obj_dual_center.clone(),
                 ),
 
-                Some(SpecialType::Root) | Some(SpecialType::LDSBranch { .. }) /* within col gen no difference for lds */ | None => self.user_problem.run_column_generation(
+                Some(SpecialType::Root | SpecialType::LDSBranch { .. }) | None => self.user_problem.run_column_generation(
                     &mut env,
                     &branch,
                     &self.shared.best,
@@ -256,11 +256,11 @@ impl<
             match branch.special {
                 Some(SpecialType::Root) => {
                     *self.shared.obj_root_node.lock().unwrap() = Some(obj);
-                    *self.shared.duration_root_node.lock().unwrap() = Some(start_time_branch.elapsed())
+                    *self.shared.duration_root_node.lock().unwrap() = Some(start_time_branch.elapsed());
                 }
-                Some(SpecialType::LDSBranch { ref taboo_filters }) if taboo_filters.len() == 0 && branch.depth == 0 => {
+                Some(SpecialType::LDSBranch { ref taboo_filters }) if taboo_filters.is_empty() && branch.depth == 0 => {
                     *self.shared.obj_root_node.lock().unwrap() = Some(obj);
-                    *self.shared.duration_lds_root_node.lock().unwrap() = Some(start_time_branch.elapsed())
+                    *self.shared.duration_lds_root_node.lock().unwrap() = Some(start_time_branch.elapsed());
                 }
                 None | Some(_) => {}
             };
@@ -278,12 +278,12 @@ impl<
                 num_filters: branch.filters.len(),
                 last_filter: {
                     if let Some(filter) = branch.filters.last() {
-                        format!("{}", filter)
+                        format!("{filter}")
                     } else {
                         "-".to_string()
                     }
                 },
-                special: branch.special.clone().map(|s| format!("{}", s)).unwrap_or("-".to_string()),
+                special: branch.special.clone().map_or("-".to_string(), |s| format!("{s}")),
                 before_obj: branch.old_obj_bound,
                 after_obj: Some(obj),
                 best_obj: best_lock.0,
@@ -331,7 +331,7 @@ impl<
                                     }
 
 
-                                    self.shared.ui_sender.send(UIUserMessage::NewBest { obj, branch_id: branch.id })
+                                    self.shared.ui_sender.send(UIUserMessage::NewBest { obj, branch_id: branch.id });
                                 }
 
                                 if was_heuristic_pricing {
@@ -382,20 +382,20 @@ impl<
                                         if was_heuristic_pricing {
                                             self.shared.open_branches.add_job(branch.upgrade_to_non_heuristic_pricing());
                                         }
-                                        self.shared.ui_sender.send(UIUserMessage::BranchCut { branch_id: branch.id })
+                                        self.shared.ui_sender.send(UIUserMessage::BranchCut { branch_id: branch.id });
                                     }
                                 } else {
                                     if was_heuristic_pricing {
                                         self.shared.open_branches.add_job(branch.upgrade_to_non_heuristic_pricing());
                                     }
-                                    self.shared.ui_sender.send(UIUserMessage::BranchCut { branch_id: branch.id })
+                                    self.shared.ui_sender.send(UIUserMessage::BranchCut { branch_id: branch.id });
                                 }
                             }
                         } else {
                             if was_heuristic_pricing {
                                 self.shared.open_branches.add_job(branch.upgrade_to_non_heuristic_pricing());
                             }
-                            self.shared.ui_sender.send(UIUserMessage::BranchCut { branch_id: branch.id })
+                            self.shared.ui_sender.send(UIUserMessage::BranchCut { branch_id: branch.id });
                         }
                     }
 
@@ -461,21 +461,21 @@ impl<
                                                 self.shared.open_branches.now_has_bound();
                                             }
                                         }
-                                        *best = (obj, patterns.clone())
+                                        *best = (obj, patterns.clone());
                                     }
 
-                                    self.shared.ui_sender.send(UIUserMessage::NewBest { obj, branch_id: branch.id })
+                                    self.shared.ui_sender.send(UIUserMessage::NewBest { obj, branch_id: branch.id });
                                 }
                                 if was_heuristic_pricing {
                                     self.shared.open_branches.add_job(branch.upgrade_to_non_heuristic_pricing());
                                 }
-                                self.shared.ui_sender.send(UIUserMessage::BranchCut { branch_id: branch.id })
+                                self.shared.ui_sender.send(UIUserMessage::BranchCut { branch_id: branch.id });
                             }
                         } else {
                             if was_heuristic_pricing {
                                 self.shared.open_branches.add_job(branch.upgrade_to_non_heuristic_pricing());
                             }
-                            self.shared.ui_sender.send(UIUserMessage::BranchCut { branch_id: branch.id })
+                            self.shared.ui_sender.send(UIUserMessage::BranchCut { branch_id: branch.id });
                         }
                     }
                 }
@@ -488,7 +488,7 @@ impl<
 }
 
 
-/// Trait to be implemented on ModelMeta data.
+/// Trait to be implemented on `ModelMeta` data.
 pub trait UserModelMeta<Constr: Clone, Var: Clone, Env: LPEnv, Model: LPModel<Constr, Var, Env>> {
 
     /// Return the column selection decision variables
@@ -533,7 +533,7 @@ pub trait UserDualStore: Clone {
     /// Perform the linear combination following Wentges rule
     /// Return the combined result as Cow.
     /// If alpha <= 0, return borrowed cow
-    fn linear_combination<'a, 'b>(&'b self, alpha: f64, out_duals: &'a Self) -> Cow<'a, Self>;
+    fn linear_combination<'a>(&self, alpha: f64, out_duals: &'a Self) -> Cow<'a, Self>;
 }
 
 #[derive(Clone)]
@@ -705,7 +705,7 @@ pub trait UserMasterProblem<
                 column,
                 &mut master,
                 &model_meta,
-                &solver,
+                solver,
                 integer,
             );
             model_meta.get_pattern_vars().insert(column.id, var);
@@ -763,7 +763,7 @@ pub trait UserMasterProblem<
                     column,
                     &mut master,
                     &model_meta,
-                    &solver,
+                    solver,
                     integer,
                 );
                 model_meta.get_pattern_vars().insert(column.id, var);
@@ -807,7 +807,7 @@ pub trait UserMasterProblem<
 
             self.get_ui().send(
                 // we show the previous pricing runtime, as that was the pricing that was done for this lp
-                UIUserMessage::LPSolveIterationFinish( LPSolveIterationUIState { best_dual_bound: best_dual_bound_with_store.clone().map(|db| db.0), obj: master_obj, lp_runtime: runtime, previous_pricing_runtime, num_columns: num_columns, num_total_pool_columns: total_new_columns })
+                UIUserMessage::LPSolveIterationFinish( LPSolveIterationUIState { best_dual_bound: best_dual_bound_with_store.clone().map(|db| db.0), obj: master_obj, lp_runtime: runtime, previous_pricing_runtime, num_columns, num_total_pool_columns: total_new_columns })
             );
 
 
@@ -897,13 +897,13 @@ pub trait UserMasterProblem<
             // https://www.or.rwth-aachen.de/files/research/publications/colgen.pdf  Eq (5)
 
             let bound_on_num_vehicles = solver.bound_num_active_columns(best_int_obj, best_int_num_columns);
-            let traditional_dual_bound: f64 = master_obj + new_paths.first().map(|p| p.0).unwrap_or(0.0) * bound_on_num_vehicles as f64;
+            let traditional_dual_bound: f64 = master_obj + new_paths.first().map_or(0.0, |p| p.0) * bound_on_num_vehicles as f64;
             //let alternative_dual_bound : f64 = master_obj / (1.0 - new_paths.first().map(|p| p.0).unwrap_or(0.0));
             let dual_bound = traditional_dual_bound;
 
 
             // update the best known dual bound
-            let best_dual_bound = best_dual_bound_with_store.clone().map(|(val, _)| val).unwrap_or(f64::MIN);
+            let best_dual_bound = best_dual_bound_with_store.clone().map_or(f64::MIN, |(val, _)| val);
 
             if dual_bound > best_dual_bound {
                 best_dual_bound_with_store = Some((dual_bound, used_duals.into_owned()));
@@ -982,7 +982,7 @@ pub trait UserMasterProblem<
     /// Insert the column into the LP model
     /// An user implementation must create a variable,
     /// insert that variable in the constraint matrix
-    /// and include it in the model_meta data.
+    /// and include it in the `model_meta` data.
     fn add_var_from_column(
         &self,
         col: &Column<ColumnType>,
@@ -1003,7 +1003,7 @@ pub trait UserMasterProblem<
     fn fix_columns_from_filters_in_model(&self, solver: &PricingSolver, active_filters: &[BranchFilter], master: &mut Model, model_meta: &mut ModelMeta) -> Result<(), ()>;
 
     /// Extract dual values from the underlying model and store them in a
-    /// DualStorage object
+    /// `DualStorage` object
     fn get_duals_from_model(&self, solver: &PricingSolver, master: &Model, model_meta: &ModelMeta) -> DualStore;
 
     /// Given a LP Solution, return a list of all possible branching options
@@ -1030,7 +1030,7 @@ pub trait UserMasterProblem<
 
         let mut chosen_patterns: Vec<(f64, &Column<ColumnType>)> = patterns
             .iter()
-            .filter(|(v, c)| !already_fixed_columns.contains(&c))
+            .filter(|(v, c)| !already_fixed_columns.contains(c))
             .map(|(v, c)| (*v, column_pool.get_column(*c)))
             .collect();
 
@@ -1070,25 +1070,23 @@ pub trait UserMasterProblem<
                 let candidate = self.create_column_forcing_filter(col, true);
 
                 if !taboo_filters.contains(&candidate) {
-                    forced_columns.push(candidate)
+                    forced_columns.push(candidate);
                 }
-            } else {
-                if let Some(potential_used_resources) = solver.unique_conflicting_resources_of_column(&col.data) {
-                    // test if we can actually fix this togerher with the other we wanted to fix
-                    for old_res in &forced_true_resources {
-                        if old_res.iter().any(|(k, v)| *v == true && *potential_used_resources.get(k).unwrap_or(&false) == true) {
-                            // consider next pattern due to resource conflict
-                            continue 'patternWhile;
-                        }
+            } else if let Some(potential_used_resources) = solver.unique_conflicting_resources_of_column(&col.data) {
+                // test if we can actually fix this togerher with the other we wanted to fix
+                for old_res in &forced_true_resources {
+                    if old_res.iter().any(|(k, v)| *v && *potential_used_resources.get(k).unwrap_or(&false)) {
+                        // consider next pattern due to resource conflict
+                        continue 'patternWhile;
                     }
+                }
 
 
-                    let candidate = self.create_column_forcing_filter(col, false);
+                let candidate = self.create_column_forcing_filter(col, false);
 
-                    if !taboo_filters.contains(&candidate) {
-                        forced_columns.push(candidate);
-                        forced_true_resources.push(potential_used_resources);
-                    }
+                if !taboo_filters.contains(&candidate) {
+                    forced_columns.push(candidate);
+                    forced_true_resources.push(potential_used_resources);
                 }
             }
         }

@@ -18,7 +18,7 @@
 
 use binary_heap_plus::{BinaryHeap};
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-use std::sync::*;
+use std::sync::{Condvar, Mutex};
 use crate::branch::Branch;
 use crate::{IBranchFilter, UserDualStore};
 use compare::Compare;
@@ -26,7 +26,7 @@ use compare::Compare;
 
 
 
-/// Thread-safe queue that blocks de_q on empty
+/// Thread-safe queue that blocks `de_q` on empty
 pub struct BlockingQueue<T, C, DualStore>
 where
     T: IBranchFilter,

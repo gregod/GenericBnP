@@ -89,7 +89,7 @@ impl<BranchFilter: IBranchFilter + Sync + Send, Column : PartialEq + 'static + C
 
 
 
-        let shared = Arc::new(SharedState::new(column_pool, &ui, None, open_branches));
+        let shared = Arc::new(SharedState::new(column_pool, ui, None, open_branches));
 
 
 
@@ -119,7 +119,7 @@ impl<BranchFilter: IBranchFilter + Sync + Send, Column : PartialEq + 'static + C
                         shared,
                         mp, ps
                     );
-                    master_problem.run_worker(0.0, f64::INFINITY, (0 + i) as i32);
+                    master_problem.run_worker(0.0, f64::INFINITY, i as i32);
                 });
             }
         });
@@ -145,14 +145,14 @@ impl<BranchFilter: IBranchFilter + Sync + Send, Column : PartialEq + 'static + C
                         shared,
                         mp, ps
                     );
-                    master_problem.run_worker(0.0, f64::INFINITY, (0 + i) as i32);
+                    master_problem.run_worker(0.0, f64::INFINITY, i as i32);
                 });
             }
         });
 
         ui.get_sender().send(UIUserMessage::ExitUi {
-            root_node: shared.duration_root_node.lock().unwrap().clone(),
-            lds_root_node_duration: shared.duration_lds_root_node.lock().unwrap().clone(),
+            root_node: *shared.duration_root_node.lock().unwrap(),
+            lds_root_node_duration: *shared.duration_lds_root_node.lock().unwrap(),
         });
 
 

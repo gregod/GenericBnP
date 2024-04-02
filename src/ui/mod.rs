@@ -31,7 +31,7 @@ unsafe impl Sync for UISender {}
 
 
 impl UISender {
-    /// Send typed UIMessage to internal channel
+    /// Send typed `UIMessage` to internal channel
     pub fn send(&self, user_msg : UIUserMessage) {
             #[cfg(not(feature = "disable_ui"))]
             self.sender.send(
@@ -44,13 +44,19 @@ impl UISender {
 
 }
 
+impl Default for UI {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UI {
 
 
-    pub fn get_sender(&self) -> UISender {
+    #[must_use] pub fn get_sender(&self) -> UISender {
         self.sender.clone()
     }
-    pub fn new() -> Self {
+    #[must_use] pub fn new() -> Self {
 
         let (sender,receiver) = channel();
 
@@ -115,7 +121,7 @@ impl UI {
                         // reset seen threads
                         seen_threads_this_phase = HashSet::default();
 
-                        writeln!(&mut buffered_out,"{}",pad_str_with(&format!("{:?}", thread_id),30,Alignment::Center, None, '⎯')).unwrap();
+                        writeln!(&mut buffered_out,"{}",pad_str_with(&format!("{thread_id:?}"),30,Alignment::Center, None, '⎯')).unwrap();
                         writeln!(&mut buffered_out,"{}", style(pad_str(title, 30, Alignment::Center,None)).green()).unwrap();
                         writeln!(&mut buffered_out,"{}","⎯".repeat(30)).unwrap();
                         buffered_out.flush().unwrap();
@@ -124,14 +130,14 @@ impl UI {
 
                         let final_time = start_time.elapsed().as_secs_f64();
                         writeln!(&mut buffered_out,"{}",pad_str_with("Statistics",30,Alignment::Center, None, '⎯')).unwrap();
-                        writeln!(&mut buffered_out,"total_lp_time: {:>8.2}s / total_pricing_time: {:>8.2}s", total_lp_runtime, total_pricing_runtime).unwrap();
+                        writeln!(&mut buffered_out,"total_lp_time: {total_lp_runtime:>8.2}s / total_pricing_time: {total_pricing_runtime:>8.2}s").unwrap();
 
                         let num_threads = seen_threads_this_phase.len();
 
 
                         let overhead =    (final_time  * num_threads  as f64) - total_lp_runtime -  total_pricing_runtime
                             // subtract root node as there only one thread is busy
-                            - root_node_duration.map(|rn| rn.as_secs_f64() * (num_threads  - 1) as f64).unwrap_or(0.0) - lds_root_node_duration.map(|rn| rn.as_secs_f64() * (num_threads  - 1) as f64).unwrap_or(0.0);
+                            - root_node_duration.map_or(0.0, |rn| rn.as_secs_f64() * (num_threads  - 1) as f64) - lds_root_node_duration.map_or(0.0, |rn| rn.as_secs_f64() * (num_threads  - 1) as f64);
 
 
                         writeln!(&mut buffered_out,"'overhead': {:>8.2}s  ({:>3.1}%) (in {} threads)", overhead, overhead/(final_time *  num_threads as f64) * 100.0, num_threads).unwrap();
@@ -202,7 +208,7 @@ impl UI {
                                  t=thread_id,
                                  time = start_time.elapsed().as_secs_f64(),
                                  state=state
-                        )).dim()).unwrap()
+                        )).dim()).unwrap();
 
                     }
                     UIMessage { thread_id, message : UIUserMessage::PricingProblemFinish(state) } => {
@@ -266,7 +272,7 @@ impl Display for BranchUIState {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "b{id}  parent=<{parent}> open=<{current_open}> cols=<{num_columns}> filter=<{num_filters}> last=<{last_filter}> obj_before=<{before_obj}> obj_now=<{after_obj}> obj*=<{best_obj}>",
         id = self.branch_id, current_open = self.current_open, parent  = self.branch_parent, num_columns = self.num_columns, before_obj = self.before_obj,
-            after_obj = self.after_obj.map(|v| format!("{}", v)).unwrap_or_else(|| "-".to_string()), best_obj = self.best_obj, num_filters = self.num_filters, last_filter = self.last_filter
+            after_obj = self.after_obj.map_or_else(|| "-".to_string(), |v| format!("{v}")), best_obj = self.best_obj, num_filters = self.num_filters, last_filter = self.last_filter
         )
     }
 }
@@ -322,7 +328,7 @@ pub struct LPSolveIterationUIState {
 
 impl Display for LPSolveIterationUIState {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "obj=<{:>10.8}> bound=<{}>: lp_runtime=<{:>5.2}> prev_pricing_runtime=<{:>5.2}> cols=<{}/{}>", self.obj, self.best_dual_bound.map(|db| format!("{:>10.8}", db)).unwrap_or("-".to_string()), self.lp_runtime, self.previous_pricing_runtime, self.num_columns, self.num_total_pool_columns )
+        write!(f, "obj=<{:>10.8}> bound=<{}>: lp_runtime=<{:>5.2}> prev_pricing_runtime=<{:>5.2}> cols=<{}/{}>", self.obj, self.best_dual_bound.map_or("-".to_string(), |db| format!("{db:>10.8}")), self.lp_runtime, self.previous_pricing_runtime, self.num_columns, self.num_total_pool_columns )
     }
 }
 

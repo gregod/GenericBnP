@@ -19,7 +19,7 @@ pub struct BranchComparator<BranchingFilter : IBranchFilter,DualStorage : UserDu
 
 impl<BranchingFilter : IBranchFilter,DualStorage : UserDualStore> BranchComparator<BranchingFilter, DualStorage>  {
 
-    pub fn with_bound() -> Self {
+    #[must_use] pub fn with_bound() -> Self {
         Self {
             has_bound : true,
             _bf : PhantomData,
@@ -27,7 +27,7 @@ impl<BranchingFilter : IBranchFilter,DualStorage : UserDualStore> BranchComparat
         }
     }
 
-    pub fn without_bound() -> Self {
+    #[must_use] pub fn without_bound() -> Self {
         Self {
             has_bound : false,
             _bf : PhantomData,
@@ -95,7 +95,7 @@ impl<BranchFilter : IBranchFilter> Display for SpecialType<BranchFilter > {
             SpecialType::Integer =>  write!(f,"Integer"),
             LDSBranch { taboo_filters} => {
                 write!(f, "LDS(").unwrap();
-                taboo_filters.iter().for_each(|filter| write!(f, "{},", filter).unwrap());
+                taboo_filters.iter().for_each(|filter| write!(f, "{filter},").unwrap());
                 write!(f, ")")
             }
         }
