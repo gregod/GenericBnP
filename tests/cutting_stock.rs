@@ -24,7 +24,7 @@ mod tests {
         gurobi_env: gurobi::Env,
     }
 
-    impl<'a> UserPricingSolver<CuttingStockProblem, Branch, Column, DualStorage> for PricingSolver {
+    impl UserPricingSolver<CuttingStockProblem, Branch, Column, DualStorage> for PricingSolver {
         fn new(problem_instance: &CuttingStockProblem, ui: UISender) -> Self {
             let mut env = gurobi::Env::new("/tmp/gurobi.log").unwrap();
             env.set(gurobi::param::OutputFlag, 0).unwrap();
@@ -369,7 +369,7 @@ mod tests {
             solver: &PricingSolver,
             active_filters: &[Branch],
             column_pool: &ColumnPool<Column, Branch>,
-            patterns: &Vec<(f64, ColumnId)>,
+            patterns: &[(f64, ColumnId)],
         ) -> Vec<BranchGroup<Branch, BranchGroupType>> {
             Vec::default()
         }

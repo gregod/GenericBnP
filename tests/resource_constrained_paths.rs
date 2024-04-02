@@ -208,7 +208,7 @@ mod tests {
             _solver: &PricingSolver,
             _active_filters: &[Branch],
             column_pool: &ColumnPool<ColumnData, Branch>,
-            patterns: &Vec<(f64, ColumnId)>,
+            patterns: &[(f64, ColumnId)],
         ) -> Vec<BranchGroup<Branch, BranchGroupType>> {
             
             let mut edge_hash: FullHashMap<EdgeIndex, f64> = FullHashMap::default();
@@ -375,7 +375,7 @@ mod tests {
     }
 
 
-    impl<'a> UserPricingSolver<ShortestPathsProblem, Branch, ColumnData, DualStorage> for PricingSolver {
+    impl UserPricingSolver<ShortestPathsProblem, Branch, ColumnData, DualStorage> for PricingSolver {
         fn new(problem_instance: &ShortestPathsProblem, ui: UISender) -> Self {
             PricingSolver {
                 instance: problem_instance.clone(),

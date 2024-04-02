@@ -1012,7 +1012,7 @@ pub trait UserMasterProblem<
         solver: &PricingSolver,
         active_filters: &[BranchFilter],
         column_pool: &ColumnPool<ColumnType, BranchFilter>,
-        patterns: &Vec<(f64, ColumnId)>,
+        patterns: &[(f64, ColumnId)],
     ) -> Vec<BranchGroup<BranchFilter, BranchGroupType>>;
 
     /// Selects the column to branch on in limted discrepancy search
@@ -1022,7 +1022,7 @@ pub trait UserMasterProblem<
         solver: &PricingSolver,
         active_filters: &[BranchFilter],
         column_pool: &ColumnPool<ColumnType, BranchFilter>,
-        patterns: &Vec<(f64, ColumnId)>,
+        patterns: &[(f64, ColumnId)],
         taboo_filters: &HashSet<BranchFilter>,
     ) -> Vec<BranchFilter> {
         let already_fixed_columns: HashSet<ColumnId> = active_filters.iter().filter_map(|f| self.is_column_forcing_filter(f)).collect();
@@ -1107,7 +1107,7 @@ pub trait UserMasterProblem<
         solver: &mut PricingSolver,
         env: &mut Env,
         column_pool: &RwLock<ColumnPool<ColumnType, BranchFilter>>,
-        patterns: &Vec<(f64, ColumnId)>,
+        patterns: &[(f64, ColumnId)],
     ) -> Option<BranchGroup<BranchFilter, BranchGroupType>> {
         fractional_options.first().cloned()
     }
