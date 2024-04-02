@@ -407,7 +407,7 @@ impl<
 
                             if let Some(branch_group) = self.user_problem.choose_fractional_solution(
                                 obj,
-                                fractional_options,
+                                &fractional_options,
                                 best,
                                 &branch,
                                 &mut self.pricing_solver,
@@ -1093,7 +1093,7 @@ pub trait UserMasterProblem<
     fn choose_fractional_solution(
         &self,
         obj: f64,
-        fractional_options: Vec<BranchGroup<BranchFilter, BranchGroupType>>,
+        fractional_options: &[BranchGroup<BranchFilter, BranchGroupType>],
         best: f64,
         branch: &Branch<BranchFilter, DualStore>,
         solver: &mut PricingSolver,

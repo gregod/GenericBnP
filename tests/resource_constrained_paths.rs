@@ -228,24 +228,19 @@ mod tests {
                         })
                 });
 
-
-            // for now -> just find first one that is fractional
-            let first_fractional = edge_hash.iter().find(|v| v.1.fract() > 0.0);
-
-            
-            if let Some((edge, _value)) = first_fractional {
-                // return single branch opportunity, with branches for the fix & forbid options
-                vec![BranchGroup::new(
+            // for every fractional edge, add branches that would separate there
+            edge_hash.iter()
+                .filter(|v| v.1.fract() > 0.0)
+                .map(|(edge, _value)| {
+                BranchGroup::new(
                     vec![
                         vec![Branch::ForceEdge(*edge, true)],
                         vec![Branch::ForceEdge(*edge, false)],
                     ],
                     BranchGroupType::Default,
-                )]
-            } else {
-                // otherwise, we are integral!
-                vec![]
-            }
+                )
+
+            }).collect()
         }
 
         fn create_column_forcing_filter(
