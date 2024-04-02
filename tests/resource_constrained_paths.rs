@@ -16,6 +16,7 @@ mod tests {
 
     #[cfg(feature = "dual_smoothing")]
     use std::borrow::Cow;
+
     use std::fmt::{Debug, Display, Formatter};
     use std::hash::Hash;
 
@@ -446,10 +447,6 @@ mod tests {
         }
 
         #[cfg(feature = "dual_smoothing")]
-        fn primal_cost_column(&self, column: &ColumnData) -> f64 {
-            f64::from(column.cost)
-        }
-
         fn price_column_with_duals(&self, column: &ColumnData, duals: &DualStorage) -> f64 {
             // run cost function on existing column and dual object
             column

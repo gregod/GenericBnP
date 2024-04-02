@@ -568,12 +568,11 @@ pub trait UserPricingSolver<ProlblemInstance, BranchFilter: IBranchFilter, Colum
         None
     }
 
-    /// Return only the primal cost of the column
-    fn primal_cost_column(&self, column: &ColumnType) -> f64;
 
     /// Return the price of the column given the dual information provided
     ///
     /// Used in the dual smoothing to identify missprices
+
     #[cfg(feature = "dual_smoothing")]
     fn price_column_with_duals(&self, column: &ColumnType, duals: &DualStorage) -> f64;
 

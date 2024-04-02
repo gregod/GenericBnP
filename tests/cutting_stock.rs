@@ -15,6 +15,7 @@ mod tests {
     };
     use gurobi::{Constr, ConstrSense, Env, Less, LinExpr, Maximize, Model, Var, VarType};
     use itertools::Itertools;
+
     #[cfg(feature = "dual_smoothing")]
     use std::borrow::Cow;
 
@@ -83,9 +84,7 @@ mod tests {
             vec![(1.0 - model.get_objective(), Column { cuts: pieces })]
         }
 
-        fn primal_cost_column(&self, column: &Column) -> f64 {
-            1.0
-        }
+
 
         #[cfg(feature = "dual_smoothing")]
         fn price_column_with_duals(&self, column: &Column, duals: &DualStorage) -> f64 {
