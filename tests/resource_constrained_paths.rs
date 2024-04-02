@@ -462,31 +462,12 @@ mod tests {
     }
 
     impl ColumnPoolFilter<Column, Branch> for ColumnPool<Column, Branch> {
-        fn get_columns(
-            &self,
-            filters: &[Branch],
-            ticket: Option<ColumnTicket>,
-        ) -> (ColumnTicket, Vec<&generic_bnp::column_pool::Column<Column>>) {
-            // if we have an inbound ticket: only get those columns after the ticket
-            // TODO: This should be be handled in the library
-            let (new_ticket, iter) = {
-                let (tick, iter) = self.get_all_columns();
-                (
-                    tick,
-                    iter.skip(if let Some(ticket) = ticket {
-                        ticket.0
-                    } else {
-                        0
-                    }),
-                )
-            };
-
-            // make sure columns adhere to node's active filters
-            let filtered_iterator = iter.filter(|col| {
+        fn filter_columns<'a>(&self, filters: &[Branch], columns: impl Iterator<Item=&'a generic_bnp::column_pool::Column<Column>>) -> Vec<&'a generic_bnp::column_pool::Column<Column>> {
+            columns.filter(|col| {
                 for filter in filters {
                     match filter {
-                        
-                        Branch::ForceColumn(filter_col, dir) => { 
+
+                        Branch::ForceColumn(filter_col, dir) => {
                             if *filter_col == col.id && *dir == false {
                                 // skip column if explicitly removed
                                 return  false;
@@ -496,16 +477,14 @@ mod tests {
                         Branch::ForceEdge(edge, dir) => {
                             if col.data.path.contains(edge) != *dir {
                                 // skip column if it does not match filter's restriction;
-                                return false; 
+                                return false;
                             }
                         }
                     }
                 }
 
                 return true;
-            });
-
-            return (new_ticket, filtered_iterator.collect());
+            }).collect()
         }
     }
 

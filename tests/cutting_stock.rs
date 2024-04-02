@@ -4,7 +4,7 @@
 #[cfg(test)]
 mod tests {
     use generic_bnp::branch::BranchGroup;
-    use generic_bnp::column_pool::{ColumnId, ColumnPool, ColumnPoolFilter, ColumnTicket};
+    use generic_bnp::column_pool::{ColumnId, ColumnPool, ColumnPoolFilter, ColumnTicket, ColumnExporter};
 
     use generic_bnp::misc::{FullHashMap, HashMap};
     use generic_bnp::solvers::gurobi::GurobiEnv;
@@ -375,6 +375,7 @@ mod tests {
             return Vec::default();
         }
     }
+
 
     impl ColumnPoolFilter<Column, Branch> for ColumnPool<Column, Branch> {
         fn get_columns(
