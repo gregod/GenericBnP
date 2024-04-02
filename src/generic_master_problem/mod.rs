@@ -64,14 +64,13 @@ pub const INT_FEAS_TOL: f64 = 1e-5;
 pub struct MasterProblem<
     ProblemInstance : Clone,
     Solver: UserPricingSolver<ProblemInstance, BranchFilter, ColumnType, DualStore>,
-    ModelMeta: UserModelMeta<Constr, Var, Env, Model>,
+    ModelMeta: UserModelMeta,
     ColumnType: PartialEq + 'static,
     DualStore: UserDualStore,
     BranchFilter: IBranchFilter,
     BranchGroupType: std::clone::Clone + Debug,
-    UMasterProblem: UserMasterProblem<ProblemInstance, Solver, ColumnType, DualStore, ModelMeta, BranchFilter, BranchGroupType, Constr, Env, Model, Var>,
-    C: Compare<Branch<BranchFilter, DualStore>> + Clone,
-    Constr: Clone, Env: LPEnv, Model: LPModel<Constr, Var, Env>, Var: Clone
+    UMasterProblem: UserMasterProblem<ProblemInstance, Solver, ColumnType, DualStore, ModelMeta, BranchFilter, BranchGroupType>,
+    C: Compare<Branch<BranchFilter, DualStore>> + Clone
 >
     where ColumnPool<ColumnType, BranchFilter>: ColumnPoolFilter<ColumnType, BranchFilter>
 {
@@ -81,10 +80,6 @@ pub struct MasterProblem<
     _bpt: PhantomData<BranchGroupType>,
     _mm: PhantomData<ModelMeta>,
     _ds: PhantomData<DualStore>,
-    _cs: PhantomData<Constr>,
-    _ev: PhantomData<Env>,
-    _md: PhantomData<Model>,
-    _vr: PhantomData<Var>,
     _pi : PhantomData<ProblemInstance>
 }
 
@@ -92,7 +87,7 @@ pub struct MasterProblem<
 impl<
     ProblemInstance : Clone,
     Solver: UserPricingSolver<ProblemInstance, BranchFilter, ColumnType, DualStore>,
-    ModelMeta: UserModelMeta<Constr, Var, Env, Model>,
+    ModelMeta: UserModelMeta,
     ColumnType: PartialEq,
     DualStore: UserDualStore,
     BranchFilter: std::clone::Clone,
@@ -104,12 +99,10 @@ impl<
         DualStore,
         ModelMeta,
         BranchFilter,
-        BranchGroupType,
-        Constr, Env, Model, Var
+        BranchGroupType
     >,
     C: Compare<Branch<BranchFilter, DualStore>> + Clone,
-    Constr: Clone, Env: LPEnv, Model: LPModel<Constr, Var, Env>, Var: Clone
-> MasterProblem<ProblemInstance,Solver, ModelMeta, ColumnType, DualStore, BranchFilter, BranchGroupType, UMasterProblem, C, Constr, Env, Model, Var>
+> MasterProblem<ProblemInstance,Solver, ModelMeta, ColumnType, DualStore, BranchFilter, BranchGroupType, UMasterProblem, C>
     where
         BranchGroupType: Clone + Debug,
         BranchFilter: IBranchFilter,
@@ -127,11 +120,6 @@ impl<
             user_problem: master_problem,
             _mm: PhantomData,
             _ds: PhantomData,
-
-            _cs: PhantomData,
-            _ev: PhantomData,
-            _md: PhantomData,
-            _vr: PhantomData,
             _pi : PhantomData
         }
     }
@@ -143,7 +131,7 @@ impl<
     pub fn run_worker(&mut self, real_bound_from: f64, consider_infeasible_over: f64, seed: i32) {
         let _inst = Instant::now();
         // setup main brancher
-        let mut env = Env::new_with_seed(seed);
+        let mut env = ModelMeta::Env::new_with_seed(seed);
         // go
 
 
@@ -489,14 +477,19 @@ impl<
 
 
 /// Trait to be implemented on `ModelMeta` data.
-pub trait UserModelMeta<Constr: Clone, Var: Clone, Env: LPEnv, Model: LPModel<Constr, Var, Env>> {
+pub trait UserModelMeta {
+
+    type Constr : Clone;
+    type Var : Clone;
+    type Env : LPEnv;
+    type Model : LPModel<Self::Constr, Self::Var, Self::Env>;
 
     /// Return the column selection decision variables
-    fn get_pattern_vars(&mut self) -> &mut HashMap<ColumnId, Var>;
+    fn get_pattern_vars(&mut self) -> &mut HashMap<ColumnId, Self::Var>;
 
     /// Callback that is called just prior to optimizing the LP model
     /// Can be used to make custom modifications
-    fn callback_before_optimize(&mut self, lower_bound: f64, best_known: &RwLock<(f64, Vec<(f64, ColumnId)>)>, model: &mut Model) {
+    fn callback_before_optimize(&mut self, lower_bound: f64, best_known: &RwLock<(f64, Vec<(f64, ColumnId)>)>, model: &mut Self::Model) {
         // nop default
     }
 }
@@ -596,10 +589,9 @@ pub trait UserMasterProblem<
     PricingSolver: UserPricingSolver<ProblemInstance, BranchFilter, ColumnType, DualStore>,
     ColumnType: PartialEq + 'static,
     DualStore: UserDualStore,
-    ModelMeta: UserModelMeta<Constr, Var, Env, Model>,
+    ModelMeta: UserModelMeta,
     BranchFilter: IBranchFilter,
     BranchGroupType: std::clone::Clone + Debug,
-    Constr: Clone, Env: LPEnv, Model: LPModel<Constr, Var, Env>, Var: Clone
 > where ColumnPool<ColumnType, BranchFilter>: ColumnPoolFilter<ColumnType, BranchFilter>
 {
 
@@ -653,7 +645,7 @@ pub trait UserMasterProblem<
     /// Return iterator selecting the ones to add to the master problem
     ///
     /// Default implementation selecting the first is provided.
-    fn filter_columns_to_add_per_iteration(&self, new_paths: Vec<(f64, ColumnType)>, env: &mut Env, solver: &PricingSolver) -> impl Iterator<Item=(f64, ColumnType)> {
+    fn filter_columns_to_add_per_iteration(&self, new_paths: Vec<(f64, ColumnType)>, env: &mut ModelMeta::Env, solver: &PricingSolver) -> impl Iterator<Item=(f64, ColumnType)> {
         new_paths.into_iter().take(1)
     }
 
@@ -668,7 +660,7 @@ pub trait UserMasterProblem<
     /// Is provided by the library, should only be overwritten if required.
     fn run_column_generation(
         &self,
-        env: &mut Env,
+        env: &mut ModelMeta::Env,
         branch: &Branch<BranchFilter, DualStore>,
         best_known: &RwLock<(f64, Vec<(f64, ColumnId)>)>,
         lower_bound: f64,
@@ -687,7 +679,7 @@ pub trait UserMasterProblem<
         } else {
             env.set_time_limit(f64::MAX);
         }
-        let mut master = Model::new("master", env);
+        let mut master = ModelMeta::Model::new("master", env);
 
 
         // create model meta +  restore patterns from column pool
@@ -961,7 +953,7 @@ pub trait UserMasterProblem<
             &model_meta.get_pattern_vars()
                 .iter()
                 .map(|(_, v)| v.clone())
-                .collect::<Vec<Var>>(),
+                .collect::<Vec<ModelMeta::Var>>(),
         )
             .into_iter()
             .zip(model_meta.get_pattern_vars().iter().map(|(i, _)| *i))
@@ -986,25 +978,25 @@ pub trait UserMasterProblem<
     fn add_var_from_column(
         &self,
         col: &Column<ColumnType>,
-        master: &mut Model,
+        master: &mut ModelMeta::Model,
         model_meta: &ModelMeta,
         solver: &PricingSolver,
         integer: bool,
-    ) -> Var;
+    ) -> ModelMeta::Var;
 
 
 
     /// Create an initial lp model constraining problem constraints
     /// Variables from column will be inserted later
-    fn initialize_model(&self, solver: &PricingSolver, active_filters: &[BranchFilter], integer: bool, master: &mut Model) -> ModelMeta;
+    fn initialize_model(&self, solver: &PricingSolver, active_filters: &[BranchFilter], integer: bool, master: &mut ModelMeta::Model) -> ModelMeta;
 
     /// Takes a list of branching filters and based on filters applies
     /// column fixing in the master model
-    fn fix_columns_from_filters_in_model(&self, solver: &PricingSolver, active_filters: &[BranchFilter], master: &mut Model, model_meta: &mut ModelMeta) -> Result<(), ()>;
+    fn fix_columns_from_filters_in_model(&self, solver: &PricingSolver, active_filters: &[BranchFilter], master: &mut ModelMeta::Model, model_meta: &mut ModelMeta) -> Result<(), ()>;
 
     /// Extract dual values from the underlying model and store them in a
     /// `DualStorage` object
-    fn get_duals_from_model(&self, solver: &PricingSolver, master: &Model, model_meta: &ModelMeta) -> DualStore;
+    fn get_duals_from_model(&self, solver: &PricingSolver, master: &ModelMeta::Model, model_meta: &ModelMeta) -> DualStore;
 
     /// Given a LP Solution, return a list of all possible branching options
     fn find_fractional_solutions(
@@ -1105,7 +1097,7 @@ pub trait UserMasterProblem<
         best: f64,
         branch: &Branch<BranchFilter, DualStore>,
         solver: &mut PricingSolver,
-        env: &mut Env,
+        env: &mut ModelMeta::Env,
         column_pool: &RwLock<ColumnPool<ColumnType, BranchFilter>>,
         patterns: &[(f64, ColumnId)],
     ) -> Option<BranchGroup<BranchFilter, BranchGroupType>> {

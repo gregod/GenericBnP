@@ -26,11 +26,11 @@ pub trait BnPFactory<Type, ProblemInstance> {
     fn new(&self, instance : &ProblemInstance) -> Type;
 }
 
-pub struct BranchAndPrice<BranchFilter: IBranchFilter, Column : PartialEq + 'static, DualStore : UserDualStore + Sync,  ModelMeta : UserModelMeta<Constr,Var,Env,Model>,
-    BranchGroupType : Clone + Debug + Send + Sync, Constr : Clone, Env : LPEnv,Model : LPModel<Constr,Var,Env>,Var : Clone,
+pub struct BranchAndPrice<BranchFilter: IBranchFilter, Column : PartialEq + 'static, DualStore : UserDualStore + Sync,  ModelMeta : UserModelMeta,
+    BranchGroupType : Clone + Debug + Send + Sync,
     PricingSolver : UserPricingSolver<ProblemInstance, BranchFilter, Column, DualStore> ,
     ProblemInstance : Clone + Send + Sync,
-    UMasterProblem : UserMasterProblem<ProblemInstance, PricingSolver, Column, DualStore, ModelMeta, BranchFilter, BranchGroupType, Constr,Env,Model,Var> + Clone,
+    UMasterProblem : UserMasterProblem<ProblemInstance, PricingSolver, Column, DualStore, ModelMeta, BranchFilter, BranchGroupType> + Clone,
 >
 where ColumnPool<Column, BranchFilter> : ColumnPoolFilter<Column, BranchFilter>{
 
@@ -39,10 +39,6 @@ where ColumnPool<Column, BranchFilter> : ColumnPoolFilter<Column, BranchFilter>{
     _bpt: PhantomData<BranchGroupType>,
     _mm: PhantomData<ModelMeta>,
     _ds: PhantomData<DualStore>,
-    _cs: PhantomData<Constr>,
-    _ev: PhantomData<Env>,
-    _md: PhantomData<Model>,
-    _vr: PhantomData<Var>,
     _pi: PhantomData<ProblemInstance>,
     _ps : PhantomData<PricingSolver>,
     _mp : PhantomData<UMasterProblem>,
@@ -51,12 +47,12 @@ where ColumnPool<Column, BranchFilter> : ColumnPoolFilter<Column, BranchFilter>{
     problem_instance : ProblemInstance,
 }
 
-impl<BranchFilter: IBranchFilter + Sync + Send, Column : PartialEq + 'static + Clone + Send + Sync, DualStore : UserDualStore + Sync + Send,  ModelMeta : UserModelMeta<Constr,Var,Env,Model>,
-    BranchGroupType : Clone + Debug + Send + Sync, Constr : Clone, Env : LPEnv,Model : LPModel<Constr,Var,Env>,Var : Clone,
+impl<BranchFilter: IBranchFilter + Sync + Send, Column : PartialEq + 'static + Clone + Send + Sync, DualStore : UserDualStore + Sync + Send,  ModelMeta : UserModelMeta,
+    BranchGroupType : Clone + Debug + Send + Sync,
     PricingSolver : UserPricingSolver<ProblemInstance, BranchFilter, Column, DualStore>,
     ProblemInstance: Clone + Send + Sync,
-    UMasterProblem : UserMasterProblem<ProblemInstance,PricingSolver, Column, DualStore, ModelMeta, BranchFilter, BranchGroupType, Constr,Env,Model,Var> + Clone + Send + Sync,
-> BranchAndPrice<BranchFilter, Column, DualStore, ModelMeta, BranchGroupType, Constr, Env, Model, Var, PricingSolver, ProblemInstance, UMasterProblem> where ColumnPool<Column, BranchFilter> : ColumnPoolFilter<Column, BranchFilter>{
+    UMasterProblem : UserMasterProblem<ProblemInstance,PricingSolver, Column, DualStore, ModelMeta, BranchFilter, BranchGroupType> + Clone,
+> BranchAndPrice<BranchFilter, Column, DualStore, ModelMeta, BranchGroupType, PricingSolver, ProblemInstance, UMasterProblem> where ColumnPool<Column, BranchFilter> : ColumnPoolFilter<Column, BranchFilter>{
     
     
     pub fn new(   problem_instance : ProblemInstance) -> Self {
@@ -67,10 +63,6 @@ impl<BranchFilter: IBranchFilter + Sync + Send, Column : PartialEq + 'static + C
             _bpt: PhantomData,
             _mm: PhantomData,
             _ds: PhantomData,
-            _cs: PhantomData,
-            _ev: PhantomData,
-            _md: PhantomData,
-            _vr: PhantomData,
             _pi : PhantomData,
             _ps: PhantomData,
             _mp: PhantomData,

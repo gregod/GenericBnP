@@ -12,8 +12,7 @@ mod tests {
     use generic_bnp::{
          BranchAndPrice, IBranchFilter, LDSSelection, LDSSettings, LPModel, StabilizationSettings, UISender, UserDualStore, UserMasterProblem, UserModelMeta, UserPricingSolver, INT_FEAS_TOL, UI
     };
-    use gurobi::ConstrSense::Equal;
-    use gurobi::{Constr,  Less, LinExpr, Model, Var};
+
 
     use std::borrow::Cow;
     use std::fmt::{Debug, Display, Formatter};
@@ -61,12 +60,17 @@ mod tests {
 
     // struct holding the master problem model
     struct ModelMeta {
-        column_vars: HashMap<ColumnId, Var>,
-        time_constraint: Constr,
-        convexity_constraint: Constr,
+        column_vars: HashMap<ColumnId, gurobi::Var>,
+        time_constraint: gurobi::Constr,
+        convexity_constraint: gurobi::Constr,
     }
-    impl UserModelMeta<Constr, Var, GurobiEnv, gurobi::Model> for ModelMeta {
-        fn get_pattern_vars(&mut self) -> &mut HashMap<ColumnId, Var> {
+    impl UserModelMeta for ModelMeta {
+        type Constr = gurobi::Constr;
+        type Var = gurobi::Var;
+        type Env = GurobiEnv;
+        type Model = gurobi::Model;
+
+        fn get_pattern_vars(&mut self) -> &mut HashMap<ColumnId, gurobi::Var> {
             &mut self.column_vars
         }
     }
@@ -130,11 +134,7 @@ mod tests {
             DualStorage,
             ModelMeta,
             Branch,
-            BranchGroupType,
-            gurobi::Constr,
-            GurobiEnv,
-            gurobi::Model,
-            gurobi::Var,
+            BranchGroupType
         > for ShortestPathsMasterProblem
     {
         fn new(problem_instance: &ShortestPathsProblem, ui: UISender) -> Self {
@@ -163,18 +163,18 @@ mod tests {
             _solver: &PricingSolver,
             _active_filters: &[Branch],
             _integer: bool,
-            master: &mut Model,
+            master: &mut gurobi::Model,
         ) -> ModelMeta {
 
             let convexity_constraint = master
-                .add_constr("convexity", LinExpr::new(), Equal, 1.0)
+                .add_constr("convexity", gurobi::LinExpr::new(), gurobi::Equal, 1.0)
                 .unwrap();
 
             let time_constraint = master
                 .add_constr(
                     "max_time",
-                    LinExpr::new(),
-                    Less,
+                    gurobi::LinExpr::new(),
+                    gurobi::Less,
                     f64::from(self.instance.max_time),
                 )
                 .unwrap();
@@ -189,7 +189,7 @@ mod tests {
         fn get_duals_from_model(
             &self,
             _solver: &PricingSolver,
-            master: &Model,
+            master: &gurobi::Model,
             model_meta: &ModelMeta,
         ) -> DualStorage {
             let duals_time_convexity = master.get_dual_list(&[
@@ -286,7 +286,7 @@ mod tests {
         ) -> gurobi::Var {
 
             // setup row: set constraints & coefficients
-            let colconstrs: Vec<Constr> = vec![
+            let colconstrs: Vec<gurobi::Constr> = vec![
                 model_meta.convexity_constraint.clone(),
                 model_meta.time_constraint.clone(),
             ];
@@ -317,6 +317,7 @@ mod tests {
             master: &mut gurobi::Model,
             model_meta: &mut ModelMeta,
         ) -> Result<(), ()> {
+
             for filter in active_filters {
                 if let Branch::ForceColumn(col, dir) = filter {
                     if let Some(var) = model_meta.column_vars.get(col) {
@@ -566,14 +567,10 @@ mod tests {
             DualStorage,
             ModelMeta,
             BranchGroupType,
-            gurobi::Constr,
-            GurobiEnv,
-            Model,
-            gurobi::Var,
             PricingSolver,
             ShortestPathsProblem,
             ShortestPathsMasterProblem,
-        > = BranchAndPrice::new(problem_instance.clone());
+        > = BranchAndPrice::new(problem_instance);
 
         // run problem
         let ui = UI::new();

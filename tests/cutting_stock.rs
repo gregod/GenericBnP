@@ -8,11 +8,8 @@ mod tests {
 
     use generic_bnp::misc::{FullHashMap, HashMap};
     use generic_bnp::solvers::gurobi::GurobiEnv;
-    use generic_bnp::{
-        BnPFactory, BranchAndPrice, IBranchFilter, LPModel, UISender,
-        UserDualStore, UserMasterProblem, UserModelMeta, UserPricingSolver, INT_FEAS_TOL, UI,
-    };
-    use gurobi::{Constr, ConstrSense, Less, LinExpr, Maximize, Model, Var, VarType};
+    use generic_bnp::{BnPFactory, BranchAndPrice, IBranchFilter, LPModel, UISender, UserDualStore, UserMasterProblem, UserModelMeta, UserPricingSolver, INT_FEAS_TOL, UI, LPEnv};
+    use gurobi::{Constr, ConstrSense, Env, Less, LinExpr, Maximize, Model, Var, VarType};
     use itertools::Itertools;
     use std::borrow::Cow;
     
@@ -185,7 +182,12 @@ mod tests {
         demand_constr: FullHashMap<PieceSize, Constr>,
     }
 
-    impl UserModelMeta<Constr, Var, GurobiEnv, gurobi::Model> for ModelMeta {
+    impl UserModelMeta for ModelMeta {
+        type Constr = Constr;
+        type Var = Var;
+        type Env = GurobiEnv;
+        type Model = Model;
+
         fn get_pattern_vars(&mut self) -> &mut HashMap<ColumnId, Var> {
             &mut self.column_vars
         }
@@ -222,11 +224,7 @@ mod tests {
             DualStorage,
             ModelMeta,
             Branch,
-            BranchGroupType,
-            gurobi::Constr,
-            GurobiEnv,
-            gurobi::Model,
-            gurobi::Var,
+            BranchGroupType
         > for CuttingStockMasterProblem
     {
         fn new(problem_instance: &CuttingStockProblem, ui: UISender) -> Self {
@@ -423,10 +421,6 @@ mod tests {
             DualStorage,
             ModelMeta,
             BranchGroupType,
-            gurobi::Constr,
-            GurobiEnv,
-            Model,
-            gurobi::Var,
             PricingSolver,
             CuttingStockProblem,
             CuttingStockMasterProblem,
