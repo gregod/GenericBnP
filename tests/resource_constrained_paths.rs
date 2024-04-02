@@ -23,167 +23,34 @@ mod tests {
 
     use petgraph::algo::simple_paths;
     use petgraph::prelude::*;
-    
-    struct PricingSolver {
-        instance: ShortestPathsProblem,
-        ui: UISender,
+
+
+
+    // implementing the problem instance data struct
+    #[derive(Debug, Clone)]
+    struct ShortestPathsProblem {
+        graph: StableDiGraph<ProblemNode, ProblemEdge>,
+        graph_start: NodeIndex,
+        graph_end: NodeIndex,
+        max_time: u8,
     }
 
-
-    impl<'a> UserPricingSolver<ShortestPathsProblem, Branch, ColumnData, DualStorage> for PricingSolver {
-        fn new(problem_instance: &ShortestPathsProblem, ui: UISender) -> Self {
-            PricingSolver {
-                instance: problem_instance.clone(),
-                ui,
-            }
-        }
-        fn solve(&mut self, active_filters: &[Branch], duals: &DualStorage) -> Vec<(f64, ColumnData)> {
-            
-
-            // create local copy of graph to apply branching constraints
-            let mut local_graph = self.instance.graph.clone();
-
-            for filter in active_filters {
-                match filter {
-                    Branch::ForceEdge(edge, dir) => {
-                        if *dir == true {
-                            // if we must take an edge -> find all other edges leaving that node and remove them.
-
-                            let edge_nodes = local_graph.edge_endpoints(*edge).unwrap();
-                            let edges_to_remove: Vec<EdgeIndex> = local_graph
-                                .edges_directed(edge_nodes.0, Outgoing)
-                                .map(|e| e.id())
-                                .filter(|other_edge| *other_edge != *edge)
-                                .collect();
-
-                            for e in edges_to_remove {
-                                local_graph.remove_edge(e);
-                            }
-
-                        } else {
-                            // if we must NOT take an edge -> simply remove the edge
-                            local_graph.remove_edge(*edge);
-                        }
-                    }
-                    Branch::ForceColumn(_, _) => { /* not applicable in pricing */ }
-                }
-            }
-
-
-            /* very naive shortest path implementation through enumeration:
-                Find all paths, calculate costs, then pick the one with lowest cost.
-                Allows for easy debugging of dual cost vectors + is feasible on the toy problem.
-                
-                (The petgraph bellman-ford implementation has no easy way to customize cost function,
-                and djikstra/a* do not work due to negative edge costs)
-             */
-
-            let all_paths = simple_paths::all_simple_paths::<Vec<_>, _>(
-                &local_graph,
-                self.instance.graph_start,
-                self.instance.graph_end,
-                0,
-                None,
-            );
-
-
-            let min_cost_path = all_paths
-                .map(|path| {
-                    // turn nodes into edges
-                    let mut visited_edges = Vec::new();
-                    for node_index in path.windows(2) {
-                        let source_node = node_index[0];
-                        let target_node = node_index[1];
-                        if let Some(edge) = local_graph.find_edge(source_node, target_node) {
-                            visited_edges.push(edge);
-                        }
-                    }
-                    // compute costs
-                    let cost_sum = visited_edges
-                        .iter()
-                        .map(|e| {
-                            f64::from(local_graph[*e].cost)
-                                - duals.time * f64::from(local_graph[*e].time)
-                        })
-                        .sum::<f64>();
-
-                    (cost_sum, visited_edges)
-                })
-                // pick smallest cost path
-                .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-
-            // if we have found a suitable path, build a column
-            if let Some((result_cost, result_path)) = min_cost_path {
-                
-                let cost_sum = result_path
-                    .iter()
-                    .map(|e| u32::from(local_graph[*e].cost))
-                    .sum();
-                let time_sum = result_path
-                    .iter()
-                    .map(|e| u32::from(local_graph[*e].time))
-                    .sum();
-
-                let column = ColumnData {
-                    path: result_path.iter().map(|e| *e).collect(),
-                    time: time_sum,
-                    cost: cost_sum,
-                };
-
-                vec![(result_cost - duals.convexity, column)]
-            } else {
-                // otherwise report that no columns were found
-                vec![]
-            }
-        }
-
-        fn primal_cost_column(&self, column: &ColumnData) -> f64 {
-            f64::from(column.cost)
-        }
-
-        fn price_column_with_duals(&self, column: &ColumnData, duals: &DualStorage) -> f64 {
-            // run cost function on existing column and dual object
-            column
-                    .path
-                    .iter()
-                    .map(|e| {
-                        f64::from(self.instance.graph[*e].cost)
-                            - duals.time * f64::from(self.instance.graph[*e].time)
-                    })
-                    .sum::<f64>()
-                - duals.convexity
-        }
-
-        fn bound_num_active_columns(
-            &self,
-            _best_int_obj: f64,
-            _current_best_used_columns: usize,
-        ) -> usize {
-            // optimal solution consists of a single column
-            1
-        }
-
+    #[derive(Debug, Clone)]
+    struct ProblemEdge {
+        cost: u8,
+        time: u8,
     }
+    #[derive(Debug, Clone)]
+    struct ProblemNode {}
 
-    #[derive(Clone, Debug)]
-    struct DualStorage {
-        time: f64,
-        convexity: f64,
-    }
 
-    impl UserDualStore for DualStorage {
-        fn linear_combination<'a, 'b>(&'b self, alpha: f64, out_duals: &'a Self) -> Cow<'a, Self> {
-            if alpha < INT_FEAS_TOL {
-                return Cow::Borrowed(out_duals);
-            }
 
-            return Cow::Owned(DualStorage {
-                time: self.time * alpha + out_duals.time * (1.0 - alpha),
-                convexity: self.convexity * alpha + out_duals.convexity * (1.0 - alpha),
-            });
-        }
-    }
 
+
+    // the master problem
+
+
+    // describe a column
     #[derive(PartialEq, Eq, Hash, Clone, Debug)]
     struct ColumnData {
         path: Vec<EdgeIndex>,
@@ -191,6 +58,41 @@ mod tests {
         time: u32,
     }
 
+
+    // struct holding the master problem model
+    struct ModelMeta {
+        column_vars: HashMap<ColumnId, Var>,
+        time_constraint: Constr,
+        convexity_constraint: Constr,
+    }
+    impl UserModelMeta<Constr, Var, GurobiEnv, gurobi::Model> for ModelMeta {
+        fn get_pattern_vars(&mut self) -> &mut HashMap<ColumnId, Var> {
+            &mut self.column_vars
+        }
+    }
+
+
+    // the dual storage object
+    #[derive(Clone, Debug)]
+    struct DualStorage {
+        time: f64,
+        convexity: f64,
+    }
+    impl UserDualStore for DualStorage {
+        fn linear_combination<'a, 'b>(&'b self, alpha: f64, out_duals: &'a Self) -> Cow<'a, Self> {
+            if alpha < INT_FEAS_TOL {
+                return Cow::Borrowed(out_duals);
+            }
+            return Cow::Owned(DualStorage {
+                time: self.time * alpha + out_duals.time * (1.0 - alpha),
+                convexity: self.convexity * alpha + out_duals.convexity * (1.0 - alpha),
+            });
+        }
+    }
+
+
+
+    // the branching structs
     #[derive(Clone, Debug, Eq, PartialEq, Hash)]
     enum Branch {
         ForceColumn(ColumnId, bool),
@@ -205,39 +107,14 @@ mod tests {
         }
     }
 
-    struct ModelMeta {
-        column_vars: HashMap<ColumnId, Var>,
-        time_constraint: Constr,
-        convexity_constraint: Constr,
-    }
-
-    impl UserModelMeta<Constr, Var, GurobiEnv, gurobi::Model> for ModelMeta {
-        fn get_pattern_vars(&mut self) -> &mut HashMap<ColumnId, Var> {
-            &mut self.column_vars
-        }
-    }
 
     #[derive(Debug, Clone)]
     enum BranchGroupType {
         Default,
     }
 
-    #[derive(Debug, Clone)]
-    struct ShortestPathsProblem {
-        graph: StableDiGraph<ProblemNode, ProblemEdge>,
-        graph_start: NodeIndex,
-        graph_end: NodeIndex,
-        max_time: u8,
-    }
 
-    #[derive(Debug, Clone)]
-    struct ProblemEdge {
-        cost: u8,
-        time: u8,
-    }
-
-    #[derive(Debug, Clone)]
-    struct ProblemNode {}
+    // setting up the master problem
 
     #[derive(Clone)]
     struct ShortestPathsMasterProblem {
@@ -486,6 +363,153 @@ mod tests {
                 return true;
             })
         }
+    }
+
+
+
+    // Implementing the pricing problem
+
+    struct PricingSolver {
+        instance: ShortestPathsProblem,
+        ui: UISender,
+    }
+
+
+    impl<'a> UserPricingSolver<ShortestPathsProblem, Branch, ColumnData, DualStorage> for PricingSolver {
+        fn new(problem_instance: &ShortestPathsProblem, ui: UISender) -> Self {
+            PricingSolver {
+                instance: problem_instance.clone(),
+                ui,
+            }
+        }
+        fn solve(&mut self, active_filters: &[Branch], duals: &DualStorage) -> Vec<(f64, ColumnData)> {
+
+
+            // create local copy of graph to apply branching constraints
+            let mut local_graph = self.instance.graph.clone();
+
+            for filter in active_filters {
+                match filter {
+                    Branch::ForceEdge(edge, dir) => {
+                        if *dir == true {
+                            // if we must take an edge -> find all other edges leaving that node and remove them.
+
+                            let edge_nodes = local_graph.edge_endpoints(*edge).unwrap();
+                            let edges_to_remove: Vec<EdgeIndex> = local_graph
+                                .edges_directed(edge_nodes.0, Outgoing)
+                                .map(|e| e.id())
+                                .filter(|other_edge| *other_edge != *edge)
+                                .collect();
+
+                            for e in edges_to_remove {
+                                local_graph.remove_edge(e);
+                            }
+
+                        } else {
+                            // if we must NOT take an edge -> simply remove the edge
+                            local_graph.remove_edge(*edge);
+                        }
+                    }
+                    Branch::ForceColumn(_, _) => { /* not applicable in pricing */ }
+                }
+            }
+
+
+            /* very naive shortest path implementation through enumeration:
+                Find all paths, calculate costs, then pick the one with lowest cost.
+                Allows for easy debugging of dual cost vectors + is feasible on the toy problem.
+
+                (The petgraph bellman-ford implementation has no easy way to customize cost function,
+                and djikstra/a* do not work due to negative edge costs)
+             */
+
+            let all_paths = simple_paths::all_simple_paths::<Vec<_>, _>(
+                &local_graph,
+                self.instance.graph_start,
+                self.instance.graph_end,
+                0,
+                None,
+            );
+
+
+            let min_cost_path = all_paths
+                .map(|path| {
+                    // turn nodes into edges
+                    let mut visited_edges = Vec::new();
+                    for node_index in path.windows(2) {
+                        let source_node = node_index[0];
+                        let target_node = node_index[1];
+                        if let Some(edge) = local_graph.find_edge(source_node, target_node) {
+                            visited_edges.push(edge);
+                        }
+                    }
+                    // compute costs
+                    let cost_sum = visited_edges
+                        .iter()
+                        .map(|e| {
+                            f64::from(local_graph[*e].cost)
+                                - duals.time * f64::from(local_graph[*e].time)
+                        })
+                        .sum::<f64>();
+
+                    (cost_sum, visited_edges)
+                })
+                // pick smallest cost path
+                .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+
+            // if we have found a suitable path, build a column
+            // we could return multiple columns here, but the toy problem would then be
+            // even more trivial
+            if let Some((result_cost, result_path)) = min_cost_path {
+
+                let cost_sum = result_path
+                    .iter()
+                    .map(|e| u32::from(local_graph[*e].cost))
+                    .sum();
+                let time_sum = result_path
+                    .iter()
+                    .map(|e| u32::from(local_graph[*e].time))
+                    .sum();
+
+                let column = ColumnData {
+                    path: result_path.iter().map(|e| *e).collect(),
+                    time: time_sum,
+                    cost: cost_sum,
+                };
+
+                vec![(result_cost - duals.convexity, column)]
+            } else {
+                // otherwise report that no columns were found
+                vec![]
+            }
+        }
+
+        fn primal_cost_column(&self, column: &ColumnData) -> f64 {
+            f64::from(column.cost)
+        }
+
+        fn price_column_with_duals(&self, column: &ColumnData, duals: &DualStorage) -> f64 {
+            // run cost function on existing column and dual object
+            column
+                .path
+                .iter()
+                .map(|e| {
+                    f64::from(self.instance.graph[*e].cost)
+                        - duals.time * f64::from(self.instance.graph[*e].time)
+                })
+                .sum::<f64>()
+                - duals.convexity
+        }
+
+        fn bound_num_active_columns(
+            &self,
+            _best_int_obj: f64,
+            _current_best_used_columns: usize,
+        ) -> usize {
+            // optimal solution consists of a single column
+            1
+        }
+
     }
 
     #[test]
