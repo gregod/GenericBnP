@@ -23,6 +23,9 @@ petgraph = "0.6.4"
 
 [features]
 
+limited_discrepancy_search = []
+dual_smoothing = []
+
 # Related to UI
 disable_ui = []
 buffered_out = []

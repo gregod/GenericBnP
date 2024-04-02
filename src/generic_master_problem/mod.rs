@@ -162,14 +162,19 @@ where
                 val
             };
 
+            #[cfg(not(feature = "limited_discrepancy_search"))]
+            let lds_early_termination_bound = 0;
+
+            #[cfg(feature = "limited_discrepancy_search")]
+            let lds_early_termination_bound = self.user_problem.get_lds_settings().early_termination_after_bound_leq;
+
             // test if we can still be better than the best found solution
             if self
                 .user_problem
                 .is_a_cutoff_by_bound_b(&branch.old_obj_bound, &curr_integer_best)
                 || branch.old_obj_bound > consider_infeasible_over
                 || (matches!(branch.special, Some(SpecialType::LDSBranch { .. }))
-                    && curr_integer_best
-                        <= f64::from(self.user_problem.get_lds_settings().early_termination_after_bound_leq))
+                    && curr_integer_best <= f64::from(lds_early_termination_bound))
             {
                 let some_root_node = match branch.special {
                     Some(SpecialType::LDSBranch { ref taboo_filters }) => {
@@ -231,6 +236,7 @@ where
                     &mut self.pricing_solver,
                     self.shared.time_limit,
                     true,
+                    #[cfg(feature = "dual_smoothing")]
                     branch.old_obj_dual_center.clone(),
                 ),
 
@@ -244,6 +250,7 @@ where
                         &mut self.pricing_solver,
                         self.shared.time_limit,
                         false,
+                        #[cfg(feature = "dual_smoothing")]
                         branch.old_obj_dual_center.clone(),
                     )
                 }
@@ -303,84 +310,98 @@ where
                 // otherwise process normally
                 match branch.special {
                     Some(SpecialType::LDSBranch { ref taboo_filters }) => {
-                        #[cfg(feature = "validity_assertions")]
-                        assert!(matches!(*self.shared.phase.read().unwrap(), Phase::PrimalHeuristic));
-
-                        if obj.is_finite() /*feasible*/ && !infeasible && (!self.user_problem.is_a_cutoff_by_bound_b(&obj, &best) /* better than best */ || /* or still partial */ was_heuristic_pricing)
+                        #[cfg(feature = "limited_discrepancy_search")]
                         {
-                            let chosen_patterns: Vec<&(f64, ColumnId)> =
-                                patterns.iter().filter(|(v, _)| *v > INT_FEAS_TOL).collect();
+                            #[cfg(feature = "validity_assertions")]
+                            assert!(matches!(*self.shared.phase.read().unwrap(), Phase::PrimalHeuristic));
 
-                            let all_integer = chosen_patterns.iter().all(|(val, _)| val.fract() < INT_FEAS_TOL);
+                            if obj.is_finite() /*feasible*/ && !infeasible && (!self.user_problem.is_a_cutoff_by_bound_b(&obj, &best) /* better than best */ || /* or still partial */ was_heuristic_pricing)
+                            {
+                                let chosen_patterns: Vec<&(f64, ColumnId)> =
+                                    patterns.iter().filter(|(v, _)| *v > INT_FEAS_TOL).collect();
 
-                            if all_integer {
-                                //  branch is done
-                                if obj < best {
-                                    // update best
-                                    {
-                                        let mut best = self.shared.best.write().unwrap();
-                                        *best = (obj, patterns.clone());
+                                let all_integer = chosen_patterns.iter().all(|(val, _)| val.fract() < INT_FEAS_TOL);
+
+                                if all_integer {
+                                    //  branch is done
+                                    if obj < best {
+                                        // update best
+                                        {
+                                            let mut best = self.shared.best.write().unwrap();
+                                            *best = (obj, patterns.clone());
+                                        }
+
+                                        self.shared.ui_sender.send(UIUserMessage::NewBest {
+                                            obj,
+                                            branch_id: branch.id,
+                                        });
                                     }
 
-                                    self.shared.ui_sender.send(UIUserMessage::NewBest {
-                                        obj,
-                                        branch_id: branch.id,
-                                    });
-                                }
+                                    if was_heuristic_pricing {
+                                        self.shared
+                                            .open_branches
+                                            .add_job(branch.upgrade_to_non_heuristic_pricing());
+                                    }
+                                } else {
+                                    // we need to fix columns !
 
-                                if was_heuristic_pricing {
-                                    self.shared
-                                        .open_branches
-                                        .add_job(branch.upgrade_to_non_heuristic_pricing());
-                                }
-                            } else {
-                                // we need to fix columns !
+                                    let cp_lock = self.shared.column_pool.read().unwrap();
+                                    let columns_to_fix = self.user_problem.select_fractional_columns_to_fix_in_lds(
+                                        &mut self.pricing_solver,
+                                        &branch.filters,
+                                        &*cp_lock,
+                                        &patterns,
+                                        taboo_filters,
+                                    );
+                                    drop(cp_lock);
 
-                                let cp_lock = self.shared.column_pool.read().unwrap();
-                                let columns_to_fix = self.user_problem.select_fractional_columns_to_fix_in_lds(
-                                    &mut self.pricing_solver,
-                                    &branch.filters,
-                                    &*cp_lock,
-                                    &patterns,
-                                    taboo_filters,
-                                );
-                                drop(cp_lock);
+                                    if !columns_to_fix.is_empty() {
+                                        if branch.depth < self.user_problem.get_lds_settings().max_depth {
+                                            if taboo_filters.len()
+                                                < self.user_problem.get_lds_settings().max_discrepancy as usize
+                                            {
+                                                self.shared.open_branches.add_job(branch.create_lds_zero_child(
+                                                    obj,
+                                                    &columns_to_fix,
+                                                    was_heuristic_pricing,
+                                                    dual_store.clone(),
+                                                ));
+                                            }
 
-                                if !columns_to_fix.is_empty() {
-                                    if branch.depth < self.user_problem.get_lds_settings().max_depth {
-                                        if taboo_filters.len()
-                                            < self.user_problem.get_lds_settings().max_discrepancy as usize
-                                        {
-                                            self.shared.open_branches.add_job(branch.create_lds_zero_child(
+                                            self.shared.open_branches.add_job(branch.create_lds_one_child(
                                                 obj,
-                                                &columns_to_fix,
+                                                columns_to_fix,
                                                 was_heuristic_pricing,
                                                 dual_store.clone(),
                                             ));
-                                        }
 
-                                        self.shared.open_branches.add_job(branch.create_lds_one_child(
-                                            obj,
-                                            columns_to_fix,
-                                            was_heuristic_pricing,
-                                            dual_store.clone(),
-                                        ));
-
-                                        if let Some(new_columns_required) =
-                                            self.user_problem.get_periodic_integer_solve_interval()
-                                        /* perioid integer */
-                                        {
-                                            let cp_lock = self.shared.column_pool.read().unwrap();
-                                            let cp_size = cp_lock.count();
-                                            if branch.id > 0
-                                                && cp_size
-                                                    > self.shared.last_integer_at_cp_size.load(Ordering::Relaxed)
-                                                        + new_columns_required
+                                            if let Some(new_columns_required) =
+                                                self.user_problem.get_periodic_integer_solve_interval()
+                                            /* perioid integer */
                                             {
-                                                self.shared.open_branches.add_job(branch.create_integer(true));
-                                                self.shared.last_integer_at_cp_size.store(cp_size, Ordering::SeqCst);
+                                                let cp_lock = self.shared.column_pool.read().unwrap();
+                                                let cp_size = cp_lock.count();
+                                                if branch.id > 0
+                                                    && cp_size
+                                                        > self.shared.last_integer_at_cp_size.load(Ordering::Relaxed)
+                                                            + new_columns_required
+                                                {
+                                                    self.shared.open_branches.add_job(branch.create_integer(true));
+                                                    self.shared
+                                                        .last_integer_at_cp_size
+                                                        .store(cp_size, Ordering::SeqCst);
+                                                }
+                                                drop(cp_lock);
                                             }
-                                            drop(cp_lock);
+                                        } else {
+                                            if was_heuristic_pricing {
+                                                self.shared
+                                                    .open_branches
+                                                    .add_job(branch.upgrade_to_non_heuristic_pricing());
+                                            }
+                                            self.shared
+                                                .ui_sender
+                                                .send(UIUserMessage::BranchCut { branch_id: branch.id });
                                         }
                                     } else {
                                         if was_heuristic_pricing {
@@ -392,26 +413,17 @@ where
                                             .ui_sender
                                             .send(UIUserMessage::BranchCut { branch_id: branch.id });
                                     }
-                                } else {
-                                    if was_heuristic_pricing {
-                                        self.shared
-                                            .open_branches
-                                            .add_job(branch.upgrade_to_non_heuristic_pricing());
-                                    }
-                                    self.shared
-                                        .ui_sender
-                                        .send(UIUserMessage::BranchCut { branch_id: branch.id });
                                 }
-                            }
-                        } else {
-                            if was_heuristic_pricing {
+                            } else {
+                                if was_heuristic_pricing {
+                                    self.shared
+                                        .open_branches
+                                        .add_job(branch.upgrade_to_non_heuristic_pricing());
+                                }
                                 self.shared
-                                    .open_branches
-                                    .add_job(branch.upgrade_to_non_heuristic_pricing());
+                                    .ui_sender
+                                    .send(UIUserMessage::BranchCut { branch_id: branch.id });
                             }
-                            self.shared
-                                .ui_sender
-                                .send(UIUserMessage::BranchCut { branch_id: branch.id });
                         }
                     }
 
@@ -562,6 +574,7 @@ pub trait UserPricingSolver<ProlblemInstance, BranchFilter: IBranchFilter, Colum
     /// Return the price of the column given the dual information provided
     ///
     /// Used in the dual smoothing to identify missprices
+    #[cfg(feature = "dual_smoothing")]
     fn price_column_with_duals(&self, column: &ColumnType, duals: &DualStorage) -> f64;
 
     /// Return a bound on the total number of potentially active columns
@@ -576,10 +589,12 @@ pub trait UserDualStore: Clone {
     /// Perform the linear combination following Wentges rule
     /// Return the combined result as Cow.
     /// If alpha <= 0, return borrowed cow
+    #[cfg(feature = "dual_smoothing")]
     fn linear_combination<'a>(&self, alpha: f64, out_duals: &'a Self) -> Cow<'a, Self>;
 }
 
 #[derive(Clone)]
+#[cfg(feature = "limited_discrepancy_search")]
 /// Settings for the limited discrepancy search
 pub struct LDSSettings {
     pub columns_to_fix_each_iteration: usize,
@@ -660,6 +675,7 @@ pub trait UserMasterProblem<
     }
 
     fn get_ui(&self) -> &UISender;
+    #[cfg(feature = "limited_discrepancy_search")]
     fn get_lds_settings(&self) -> &LDSSettings {
         &LDSSettings {
             columns_to_fix_each_iteration: 0,
@@ -674,6 +690,8 @@ pub trait UserMasterProblem<
     fn get_periodic_integer_solve_interval(&self) -> &Option<usize> {
         &None
     }
+
+    #[cfg(feature = "dual_smoothing")]
     fn get_stabilization_settings(&self) -> &StabilizationSettings {
         &StabilizationSettings {
             cross_iteration_memory: false,
@@ -686,9 +704,11 @@ pub trait UserMasterProblem<
 
     /// Return a custom branching filter that represents
     /// forcing a column to be either used or not be used
+    #[cfg(feature = "limited_discrepancy_search")]
     fn create_column_forcing_filter(&self, column: &Column<ColumnType>, direction: bool) -> BranchFilter;
 
     /// Test if a branching filter is a column forcing filter. If so return column id that is forced.
+    #[cfg(feature = "limited_discrepancy_search")]
     fn is_column_forcing_filter(&self, filter: &BranchFilter) -> Option<ColumnId>;
 
     /// Given an ordered list of negative reduced cost columns
@@ -731,8 +751,9 @@ pub trait UserMasterProblem<
         solver: &mut PricingSolver,
         time_limit: Option<Instant>,
         integer: bool,
-        parent_dual_center: Option<(f64, DualStore)>,
+        #[cfg(feature = "dual_smoothing")] parent_dual_center: Option<(f64, DualStore)>,
     ) -> ColGenResult<DualStore> {
+        #[cfg(feature = "dual_smoothing")]
         let stabilization_settings = self.get_stabilization_settings();
 
         if integer {
@@ -761,6 +782,7 @@ pub trait UserMasterProblem<
         drop(column_pool_lock);
         let mut last_column_ticket = Some(column_ticket_read);
 
+        #[cfg(feature = "limited_discrepancy_search")]
         if let Err(_e) = self.fix_columns_from_filters_in_model(solver, &branch.filters, &mut master, &mut model_meta) {
             // columns couldn't be fixed -> invalid branch
 
@@ -785,8 +807,12 @@ pub trait UserMasterProblem<
         let colgen_start = Instant::now();
 
         // initial with parent center
+        #[cfg(feature = "dual_smoothing")]
         let mut best_dual_bound_with_store: Option<(f64, DualStore)> = parent_dual_center;
+        #[cfg(not(feature = "dual_smoothing"))]
+        let mut best_dual_bound_with_store: Option<(f64, DualStore)> = None;
 
+        #[cfg(feature = "dual_smoothing")]
         let mut current_smoothing_alpha = stabilization_settings.initial_smoothing_alpha;
 
         let mut iterations_counter = 0;
@@ -811,6 +837,7 @@ pub trait UserMasterProblem<
             drop(column_pool_lock);
             last_column_ticket = Some(column_ticket_read);
 
+            #[cfg(feature = "dual_smoothing")]
             if !stabilization_settings.cross_iteration_memory {
                 current_smoothing_alpha = stabilization_settings.initial_smoothing_alpha;
             }
@@ -883,12 +910,24 @@ pub trait UserMasterProblem<
 
             let start_pricing = Instant::now();
 
-            let (new_paths, used_duals) = if let (Some((ref in_bound, ref in_duals)), true) =
-                (&best_dual_bound_with_store, current_smoothing_alpha > INT_FEAS_TOL)
-            {
+            // set defaults when not enabled
+            #[cfg(not(feature = "dual_smoothing"))]
+            let current_smoothing_alpha = 0.0;
+
+            let (new_paths, used_duals) = if let (Some((ref in_bound, ref in_duals)), true, true) = (
+                &best_dual_bound_with_store,
+                current_smoothing_alpha > INT_FEAS_TOL,
+                cfg!(feature = "dual_smoothing"),
+            ) {
+                #[cfg(not(feature = "dual_smoothing"))]
+                unreachable!(); // reaching this branch is disabled by cfg! gate in match above
+
+                #[cfg(feature = "dual_smoothing")]
                 let mut new_paths: Vec<(f64, ColumnType)>;
+                #[cfg(feature = "dual_smoothing")]
                 let mut smooth_duals;
 
+                #[cfg(feature = "dual_smoothing")]
                 loop {
                     smooth_duals = in_duals.linear_combination(current_smoothing_alpha, &real_duals);
                     // find paths via smooth duals, that are then still neg reduced cost on real duall
@@ -927,7 +966,7 @@ pub trait UserMasterProblem<
                     // exit (return current paths and used duals)
                     break;
                 }
-
+                #[cfg(feature = "dual_smoothing")]
                 (new_paths, smooth_duals)
             } else {
                 // if we have the real duals, we can just find neg red cost
@@ -970,7 +1009,13 @@ pub trait UserMasterProblem<
             }
 
             // apply dual bound similar to gurobi if, no smoothing is active
-            if stabilization_settings.initial_smoothing_alpha < INT_FEAS_TOL {
+
+            #[cfg(not(feature = "dual_smoothing"))]
+            let apply_dual_bound = true;
+            #[cfg(feature = "dual_smoothing")]
+            let apply_dual_bound = stabilization_settings.initial_smoothing_alpha < INT_FEAS_TOL;
+
+            if apply_dual_bound {
                 if (master_obj - best_dual_bound) / master_obj < /* epsilon */ INT_FEAS_TOL {
                     self.get_ui().send(UIUserMessage::Log(format!(
                         "Exit pricing due to pr\
@@ -1021,7 +1066,10 @@ pub trait UserMasterProblem<
             early_branched: partial_exit_early,
             time_limit_reached: hit_time_limit,
             infeasible: false,
+            #[cfg(feature = "dual_smoothing")]
             smoothing_center: best_dual_bound_with_store,
+            #[cfg(not(feature = "dual_smoothing"))]
+            smoothing_center: None,
         };
     }
 
@@ -1050,6 +1098,7 @@ pub trait UserMasterProblem<
 
     /// Takes a list of branching filters and based on filters applies
     /// column fixing in the master model
+    #[cfg(feature = "limited_discrepancy_search")]
     fn fix_columns_from_filters_in_model(
         &self,
         solver: &PricingSolver,
@@ -1078,6 +1127,7 @@ pub trait UserMasterProblem<
 
     /// Selects the column to branch on in limted discrepancy search
     /// Library provided implementation should only be overriden if required.
+    #[cfg(feature = "limited_discrepancy_search")]
     fn select_fractional_columns_to_fix_in_lds(
         &self,
         solver: &PricingSolver,

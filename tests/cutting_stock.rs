@@ -2,6 +2,7 @@
 // Problem adapted from https://www2.imm.dtu.dk/courses/02717/columngeneration/columngeneration.pdf
 
 #[cfg(test)]
+#[cfg(not(feature = "limited_discrepancy_search"))]
 mod tests {
     use generic_bnp::branch::BranchGroup;
     use generic_bnp::column_pool::{ColumnId, ColumnPool, ColumnPoolFilter, ColumnTicket};
@@ -14,6 +15,7 @@ mod tests {
     };
     use gurobi::{Constr, ConstrSense, Env, Less, LinExpr, Maximize, Model, Var, VarType};
     use itertools::Itertools;
+    #[cfg(feature = "dual_smoothing")]
     use std::borrow::Cow;
 
     use std::fmt::{Debug, Display, Formatter};
@@ -85,6 +87,7 @@ mod tests {
             1.0
         }
 
+        #[cfg(feature = "dual_smoothing")]
         fn price_column_with_duals(&self, column: &Column, duals: &DualStorage) -> f64 {
             1.0 - column
                 .cuts
@@ -104,6 +107,7 @@ mod tests {
     }
 
     impl UserDualStore for DualStorage {
+        #[cfg(feature = "dual_smoothing")]
         fn linear_combination<'a>(&self, alpha: f64, out_duals: &'a Self) -> Cow<'a, Self> {
             if alpha < INT_FEAS_TOL {
                 return Cow::Borrowed(out_duals);
@@ -149,9 +153,7 @@ mod tests {
     }
 
     #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-    enum Branch {
-        ForceColumn(ColumnId, bool),
-    }
+    enum Branch {}
 
     impl IBranchFilter for Branch {}
 
@@ -214,22 +216,6 @@ mod tests {
             &self.ui
         }
 
-        fn create_column_forcing_filter(
-            &self,
-            column: &generic_bnp::column_pool::Column<Column>,
-            direction: bool,
-        ) -> Branch {
-            Branch::ForceColumn(column.id, direction)
-        }
-
-        fn is_column_forcing_filter(&self, filter: &Branch) -> Option<ColumnId> {
-            if let Branch::ForceColumn(col_id, dir) = filter {
-                Some(*col_id)
-            } else {
-                None
-            }
-        }
-
         fn add_var_from_column(
             &self,
             col: &generic_bnp::column_pool::Column<Column>,
@@ -288,33 +274,6 @@ mod tests {
                 column_vars: Default::default(),
                 demand_constr: constr,
             }
-        }
-
-        fn fix_columns_from_filters_in_model(
-            &self,
-            solver: &PricingSolver,
-            active_filters: &[Branch],
-            master: &mut Model,
-            model_meta: &mut ModelMeta,
-        ) -> Result<(), ()> {
-            for filter in active_filters {
-                if let Branch::ForceColumn(col, dir) = filter {
-                    if let Some(var) = model_meta.column_vars.get(col) {
-                        master
-                            .add_constr(
-                                &format!("forceColumnActive[{:?}]", col),
-                                1.0 * var,
-                                gurobi::Equal,
-                                if *dir { 1.0 } else { 0.0 },
-                            )
-                            .unwrap();
-                    } else {
-                        return Err(());
-                    }
-                }
-            }
-
-            Ok(())
         }
 
         fn get_duals_from_model(&self, solver: &PricingSolver, master: &Model, model_meta: &ModelMeta) -> DualStorage {

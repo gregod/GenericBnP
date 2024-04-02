@@ -96,6 +96,18 @@ where
         }
     }
 
+    #[cfg(feature = "limited_discrepancy_search")]
+    fn get_lds_settings(&self) -> &LDSSettings {
+        &LDSSettings {
+            columns_to_fix_each_iteration: 0,
+            selection: LDSSelection::ClosestToOne,
+            max_depth: 0,
+            max_discrepancy: 0,
+            early_termination_after_bound_leq: 0,
+            do_only_lds: false,
+        }
+    }
+
     pub fn solve(
         &self,
         ui: &UI,
@@ -106,27 +118,30 @@ where
 
         let shared = Arc::new(SharedState::new(column_pool, ui, None, open_branches));
 
-        // start with phase main
+        #[cfg(feature = "limited_discrepancy_search")]
         {
-            *shared.phase.write().unwrap() = Phase::PrimalHeuristic;
-        }
-        shared.open_branches.add_job(Branch::create_lds_root());
-
-        shared.ui_sender.send(UIUserMessage::StartPhase("Primal Heuristic", 0));
-        // run main
-        thread::scope(|s| {
-            for i in 0..num_threads {
-                let shared = shared.clone();
-
-                let pi = self.problem_instance.clone();
-                s.spawn(move || {
-                    let mp = UMasterProblem::new(&pi, shared.ui_sender.clone());
-                    let ps = PricingSolver::new(&pi, shared.ui_sender.clone());
-                    let mut master_problem = MasterProblem::new(shared, mp, ps);
-                    master_problem.run_worker(0.0, f64::INFINITY, i as i32);
-                });
+            // start with phase main
+            {
+                *shared.phase.write().unwrap() = Phase::PrimalHeuristic;
             }
-        });
+            shared.open_branches.add_job(Branch::create_lds_root());
+
+            shared.ui_sender.send(UIUserMessage::StartPhase("Primal Heuristic", 0));
+            // run main
+            thread::scope(|s| {
+                for i in 0..num_threads {
+                    let shared = shared.clone();
+
+                    let pi = self.problem_instance.clone();
+                    s.spawn(move || {
+                        let mp = UMasterProblem::new(&pi, shared.ui_sender.clone());
+                        let ps = PricingSolver::new(&pi, shared.ui_sender.clone());
+                        let mut master_problem = MasterProblem::new(shared, mp, ps);
+                        master_problem.run_worker(0.0, f64::INFINITY, i as i32);
+                    });
+                }
+            });
+        }
 
         // start with phase main
         {

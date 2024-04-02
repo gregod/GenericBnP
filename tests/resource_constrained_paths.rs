@@ -10,13 +10,17 @@ mod tests {
     use generic_bnp::misc::{FullHashMap, HashMap};
     use generic_bnp::solvers::gurobi::GurobiEnv;
     use generic_bnp::{
-        BranchAndPrice, IBranchFilter, LDSSelection, LDSSettings, LPModel, StabilizationSettings, UISender,
-        UserDualStore, UserMasterProblem, UserModelMeta, UserPricingSolver, INT_FEAS_TOL, UI,
+        BranchAndPrice, IBranchFilter, LPModel, StabilizationSettings, UISender, UserDualStore, UserMasterProblem,
+        UserModelMeta, UserPricingSolver, INT_FEAS_TOL, UI,
     };
 
+    #[cfg(feature = "dual_smoothing")]
     use std::borrow::Cow;
     use std::fmt::{Debug, Display, Formatter};
     use std::hash::Hash;
+
+    #[cfg(feature = "limited_discrepancy_search")]
+    use generic_bnp::{LDSSelection, LDSSettings};
 
     use petgraph::algo::simple_paths;
     use petgraph::prelude::*;
@@ -72,6 +76,7 @@ mod tests {
         convexity: f64,
     }
     impl UserDualStore for DualStorage {
+        #[cfg(feature = "dual_smoothing")]
         fn linear_combination<'a>(&self, alpha: f64, out_duals: &'a Self) -> Cow<'a, Self> {
             if alpha < INT_FEAS_TOL {
                 return Cow::Borrowed(out_duals);
@@ -86,8 +91,9 @@ mod tests {
     // the branching structs
     #[derive(Clone, Debug, Eq, PartialEq, Hash)]
     enum Branch {
-        ForceColumn(ColumnId, bool),
         ForceEdge(EdgeIndex, bool),
+        #[cfg(feature = "limited_discrepancy_search")]
+        ForceColumn(ColumnId, bool),
     }
 
     impl IBranchFilter for Branch {}
@@ -133,6 +139,7 @@ mod tests {
             &self.ui
         }
 
+        #[cfg(feature = "dual_smoothing")]
         fn get_stabilization_settings(&self) -> &StabilizationSettings {
             &StabilizationSettings {
                 cross_iteration_memory: false,
@@ -219,30 +226,6 @@ mod tests {
                 .collect()
         }
 
-        fn create_column_forcing_filter(&self, column: &Column<ColumnData>, direction: bool) -> Branch {
-            // return non-generic branch type
-            Branch::ForceColumn(column.id, direction)
-        }
-
-        fn is_column_forcing_filter(&self, filter: &Branch) -> Option<ColumnId> {
-            // link non-generic branch type
-            match filter {
-                Branch::ForceColumn(id, _) => Some(*id),
-                _ => None,
-            }
-        }
-
-        fn get_lds_settings(&self) -> &LDSSettings {
-            &LDSSettings {
-                columns_to_fix_each_iteration: 1,
-                selection: LDSSelection::ClosestToOne,
-                max_depth: 20,
-                max_discrepancy: 20,
-                early_termination_after_bound_leq: 0,
-                do_only_lds: false,
-            }
-        }
-
         fn add_var_from_column(
             &self,
             col: &Column<ColumnData>,
@@ -272,6 +255,7 @@ mod tests {
                 .unwrap()
         }
 
+        #[cfg(feature = "limited_discrepancy_search")]
         fn fix_columns_from_filters_in_model(
             &self,
             _solver: &PricingSolver,
@@ -298,6 +282,33 @@ mod tests {
 
             Ok(())
         }
+
+        #[cfg(feature = "limited_discrepancy_search")]
+        fn create_column_forcing_filter(&self, column: &Column<ColumnData>, direction: bool) -> Branch {
+            // return non-generic branch type
+            Branch::ForceColumn(column.id, direction)
+        }
+
+        #[cfg(feature = "limited_discrepancy_search")]
+        fn is_column_forcing_filter(&self, filter: &Branch) -> Option<ColumnId> {
+            // link non-generic branch type
+            match filter {
+                Branch::ForceColumn(id, _) => Some(*id),
+                _ => None,
+            }
+        }
+
+        #[cfg(feature = "limited_discrepancy_search")]
+        fn get_lds_settings(&self) -> &LDSSettings {
+            &LDSSettings {
+                columns_to_fix_each_iteration: 1,
+                selection: LDSSelection::ClosestToOne,
+                max_depth: 20,
+                max_discrepancy: 20,
+                early_termination_after_bound_leq: 0,
+                do_only_lds: false,
+            }
+        }
     }
 
     impl ColumnPoolFilter<ColumnData, Branch> for ColumnPool<ColumnData, Branch> {
@@ -309,6 +320,7 @@ mod tests {
             columns.filter(move |col| {
                 for filter in filters {
                     match filter {
+                        #[cfg(feature = "limited_discrepancy_search")]
                         Branch::ForceColumn(filter_col, dir) => {
                             if *filter_col == col.id && !(*dir) {
                                 // skip column if explicitly removed
@@ -350,6 +362,9 @@ mod tests {
 
             for filter in active_filters {
                 match filter {
+                    #[cfg(feature = "limited_discrepancy_search")]
+                    Branch::ForceColumn(_, _) => { /* lds branch not applicable in pricing */ }
+
                     Branch::ForceEdge(edge, dir) => {
                         if *dir {
                             // if we must take an edge -> find all other edges leaving that node and remove them.
@@ -369,7 +384,6 @@ mod tests {
                             local_graph.remove_edge(*edge);
                         }
                     }
-                    Branch::ForceColumn(_, _) => { /* not applicable in pricing */ }
                 }
             }
 
@@ -431,6 +445,7 @@ mod tests {
             }
         }
 
+        #[cfg(feature = "dual_smoothing")]
         fn primal_cost_column(&self, column: &ColumnData) -> f64 {
             f64::from(column.cost)
         }

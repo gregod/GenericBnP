@@ -79,6 +79,7 @@ pub enum SpecialType<BranchFilter: IBranchFilter> {
     Integer,
     LDSBranch { taboo_filters: HashSet<BranchFilter> },
 }
+
 use compare::Compare;
 use core::fmt::Formatter;
 use std::marker::PhantomData;
@@ -201,6 +202,7 @@ where
 
     /// Given a current lds branching node,
     /// create the zero branch that expands the taboo list
+    #[cfg(feature = "limited_discrepancy_search")]
     pub fn create_lds_zero_child(
         &self,
         parent_obj: f64,
@@ -237,6 +239,7 @@ where
 
     /// Given a current lds branching node,
     /// create the branch forcing a column
+    #[cfg(feature = "limited_discrepancy_search")]
     pub fn create_lds_one_child(
         &self,
         parent_obj: f64,
