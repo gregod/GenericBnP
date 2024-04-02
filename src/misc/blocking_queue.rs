@@ -16,43 +16,35 @@
 */
 #![allow(dead_code)]
 
-use binary_heap_plus::{BinaryHeap};
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-use std::sync::{Condvar, Mutex};
 use crate::branch::Branch;
 use crate::{IBranchFilter, UserDualStore};
+use binary_heap_plus::BinaryHeap;
 use compare::Compare;
-
-
-
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::{Condvar, Mutex};
 
 /// Thread-safe queue that blocks `de_q` on empty
 pub struct BlockingQueue<T, C, DualStore>
 where
     T: IBranchFilter,
-    DualStore : UserDualStore,
-C : Compare<Branch<T,DualStore>>  + Clone
-
+    DualStore: UserDualStore,
+    C: Compare<Branch<T, DualStore>> + Clone,
 {
-    queue: Mutex<BinaryHeap<Branch<T,DualStore>, C>>,
+    queue: Mutex<BinaryHeap<Branch<T, DualStore>, C>>,
     did_swap_priority: AtomicBool,
-    flushing : AtomicBool,
+    flushing: AtomicBool,
     in_progress: AtomicU8,
     condvar: Condvar,
-    compare_bound : C,
-    compare_without_bound : C
+    compare_bound: C,
+    compare_without_bound: C,
 }
 
-impl<T: IBranchFilter, C : Compare<Branch<T,DualStore >> + Clone, DualStore : UserDualStore> BlockingQueue<T , C, DualStore>
-
+impl<T: IBranchFilter, C: Compare<Branch<T, DualStore>> + Clone, DualStore: UserDualStore>
+    BlockingQueue<T, C, DualStore>
 {
     /// Create empty blocking queue
-    pub fn new(compare_bound :  C, compare_without_bound : C) -> Self {
-
-
-        let heap  = BinaryHeap::from_vec_cmp(vec![] as Vec<Branch<T, DualStore>>, compare_without_bound.clone());
-
-
+    pub fn new(compare_bound: C, compare_without_bound: C) -> Self {
+        let heap = BinaryHeap::from_vec_cmp(vec![] as Vec<Branch<T, DualStore>>, compare_without_bound.clone());
 
         Self {
             queue: Mutex::new(heap),
@@ -61,13 +53,11 @@ impl<T: IBranchFilter, C : Compare<Branch<T,DualStore >> + Clone, DualStore : Us
             did_swap_priority: AtomicBool::new(false),
             compare_bound,
             compare_without_bound,
-            flushing : false.into()
-
+            flushing: false.into(),
         }
     }
 
     pub fn now_has_bound(&self) {
-
         // only swap if not previously
         if !self.did_swap_priority.load(self::Ordering::Relaxed) {
             self.did_swap_priority.store(true, self::Ordering::SeqCst);
@@ -79,8 +69,9 @@ impl<T: IBranchFilter, C : Compare<Branch<T,DualStore >> + Clone, DualStore : Us
     /// push input on back of queue
     /// - unrecoverable if lock fails so just unwrap
     pub fn add_job(&self, t: Branch<T, DualStore>) {
-
-        if self.flushing.load(Ordering::SeqCst) { return;}
+        if self.flushing.load(Ordering::SeqCst) {
+            return;
+        }
         let mut lq = self.queue.lock().unwrap();
         lq.push(t);
         self.condvar.notify_one();
@@ -95,7 +86,9 @@ impl<T: IBranchFilter, C : Compare<Branch<T,DualStore >> + Clone, DualStore : Us
             lq = self.condvar.wait(lq).unwrap();
         }
 
-        if self.flushing.load(Ordering::SeqCst) { return None}
+        if self.flushing.load(Ordering::SeqCst) {
+            return None;
+        }
 
         let job = lq.pop();
         if job.is_some() {
@@ -110,7 +103,6 @@ impl<T: IBranchFilter, C : Compare<Branch<T,DualStore >> + Clone, DualStore : Us
     }
 
     pub fn flush_and_terminate(&self) {
-
         self.flushing.store(true, Ordering::SeqCst);
         self.in_progress.store(0, Ordering::SeqCst);
         self.condvar.notify_all();
@@ -120,11 +112,14 @@ impl<T: IBranchFilter, C : Compare<Branch<T,DualStore >> + Clone, DualStore : Us
         self.queue.lock().unwrap().clone().into_vec()
     }
 
-
     pub fn lowest_bound(&self) -> Option<f64> {
-        self.queue.lock().unwrap().iter().map(|i| i.old_obj_bound).min_by(|a, b| a.partial_cmp(b).unwrap())
+        self.queue
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|i| i.old_obj_bound)
+            .min_by(|a, b| a.partial_cmp(b).unwrap())
     }
-
 
     /// return number of elements in queue
     pub fn len(&self) -> usize {

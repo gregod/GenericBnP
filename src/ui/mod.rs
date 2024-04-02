@@ -1,47 +1,43 @@
 use std::fmt::{Display, Formatter, Write as FmtWrite};
 
-
+use crate::misc::HashSet;
 use std::io::Write;
 use std::time::{Duration, Instant};
-use crate::misc::HashSet;
 
+use std::io::BufWriter;
 use std::sync::mpsc::{channel, Sender};
 use std::thread::ThreadId;
-use std::io::BufWriter;
 
-use console::{pad_str_with,Alignment,style,pad_str};
-use std::fs::OpenOptions;
 use crate::branch::SpecialType;
+use console::{pad_str, pad_str_with, style, Alignment};
+use std::fs::OpenOptions;
 
 /// Struct to hold the UI
 /// Particulary the receiver channel
 pub struct UI {
-    sender : UISender
+    sender: UISender,
 }
-
 
 #[derive(Clone)]
 pub struct UISender {
-    sender : Sender<UIMessage>
+    sender: Sender<UIMessage>,
 }
 
 // needed in stable rust, unstable auto detects
 unsafe impl Send for UISender {}
 unsafe impl Sync for UISender {}
 
-
 impl UISender {
     /// Send typed `UIMessage` to internal channel
-    pub fn send(&self, user_msg : UIUserMessage) {
-            #[cfg(not(feature = "disable_ui"))]
-            self.sender.send(
-                UIMessage {
-                    thread_id: std::thread::current().id(),
-                    message: user_msg
-                }
-            ).unwrap();
+    pub fn send(&self, user_msg: UIUserMessage) {
+        #[cfg(not(feature = "disable_ui"))]
+        self.sender
+            .send(UIMessage {
+                thread_id: std::thread::current().id(),
+                message: user_msg,
+            })
+            .unwrap();
     }
-
 }
 
 impl Default for UI {
@@ -51,22 +47,18 @@ impl Default for UI {
 }
 
 impl UI {
-
-
-    #[must_use] pub fn get_sender(&self) -> UISender {
+    #[must_use]
+    pub fn get_sender(&self) -> UISender {
         self.sender.clone()
     }
-    #[must_use] pub fn new() -> Self {
-
-        let (sender,receiver) = channel();
-
+    #[must_use]
+    pub fn new() -> Self {
+        let (sender, receiver) = channel();
 
         #[cfg(not(feature = "disable_ui"))]
-        std::thread::spawn(move|| {
-
-
+        std::thread::spawn(move || {
             #[cfg(feature = "branch-graphviz")]
-                let mut graphviz_branch_file = OpenOptions::new()
+            let mut graphviz_branch_file = OpenOptions::new()
                 .write(true)
                 .create(true)
                 .truncate(true)
@@ -76,20 +68,15 @@ impl UI {
             #[cfg(feature = "branch-graphviz")]
             graphviz_branch_file.write(b"digraph {\n").unwrap();
 
-
-
-
-
-
             #[cfg(not(feature = "locked_out"))]
-                let stdout = std::io::stdout();
+            let stdout = std::io::stdout();
             #[cfg(feature = "locked_out")]
-                let stdout = std::io::stdout().lock();
+            let stdout = std::io::stdout().lock();
 
             #[cfg(not(feature = "buffered_out"))]
-                let mut buffered_out = stdout;
+            let mut buffered_out = stdout;
             #[cfg(feature = "buffered_out")]
-                let mut buffered_out = BufWriter::with_capacity(512,stdout);
+            let mut buffered_out = BufWriter::with_capacity(512, stdout);
 
             let start_time = Instant::now();
 
@@ -103,62 +90,142 @@ impl UI {
 
             loop {
                 match receiver.recv().unwrap() {
-                    UIMessage { thread_id, message : UIUserMessage::BranchCut { branch_id} } => {
+                    UIMessage {
+                        thread_id,
+                        message: UIUserMessage::BranchCut { branch_id },
+                    } => {
                         #[cfg(feature = "branch-graphviz")]
-                        graphviz_branch_file.write(format!("{} [style=\"filled\" fillcolor=\"lightyellow\"] ", branch_id
-                        ).as_bytes()).unwrap();
+                        graphviz_branch_file
+                            .write(format!("{} [style=\"filled\" fillcolor=\"lightyellow\"] ", branch_id).as_bytes())
+                            .unwrap();
                     }
-                    UIMessage { thread_id, message :  UIUserMessage::TimeLimitReached }  =>   writeln!(&mut buffered_out,"{}",style("Time Limit Reached").yellow().bold()).unwrap(),
-                    UIMessage { thread_id, message :  UIUserMessage::Log(msg) }  =>   writeln!(&mut buffered_out,"[{:?}] {:>6.2}  {}",  thread_id, start_time.elapsed().as_secs_f64(),msg).unwrap(),
-                    UIMessage { thread_id, message : UIUserMessage::LogS( msg)  }=>   writeln!(&mut buffered_out,"[{:?}] {:>6.2}  {}", thread_id, start_time.elapsed().as_secs_f64(),msg).unwrap(),
-                    UIMessage { thread_id, message : UIUserMessage::StartWorker } => {
+                    UIMessage {
+                        thread_id,
+                        message: UIUserMessage::TimeLimitReached,
+                    } => writeln!(&mut buffered_out, "{}", style("Time Limit Reached").yellow().bold()).unwrap(),
+                    UIMessage {
+                        thread_id,
+                        message: UIUserMessage::Log(msg),
+                    } => writeln!(
+                        &mut buffered_out,
+                        "[{:?}] {:>6.2}  {}",
+                        thread_id,
+                        start_time.elapsed().as_secs_f64(),
+                        msg
+                    )
+                    .unwrap(),
+                    UIMessage {
+                        thread_id,
+                        message: UIUserMessage::LogS(msg),
+                    } => writeln!(
+                        &mut buffered_out,
+                        "[{:?}] {:>6.2}  {}",
+                        thread_id,
+                        start_time.elapsed().as_secs_f64(),
+                        msg
+                    )
+                    .unwrap(),
+                    UIMessage {
+                        thread_id,
+                        message: UIUserMessage::StartWorker,
+                    } => {
                         seen_threads_this_phase.insert(thread_id);
-                        writeln!(&mut buffered_out,"{}",style(format!("Worker #{} activated", seen_threads_this_phase.len())).yellow().bold()).unwrap();
+                        writeln!(
+                            &mut buffered_out,
+                            "{}",
+                            style(format!("Worker #{} activated", seen_threads_this_phase.len()))
+                                .yellow()
+                                .bold()
+                        )
+                        .unwrap();
                     }
 
-                    UIMessage { thread_id, message : UIUserMessage::StartPhase(title, level ) } => {
-
+                    UIMessage {
+                        thread_id,
+                        message: UIUserMessage::StartPhase(title, level),
+                    } => {
                         // reset seen threads
                         seen_threads_this_phase = HashSet::default();
 
-                        writeln!(&mut buffered_out,"{}",pad_str_with(&format!("{thread_id:?}"),30,Alignment::Center, None, '⎯')).unwrap();
-                        writeln!(&mut buffered_out,"{}", style(pad_str(title, 30, Alignment::Center,None)).green()).unwrap();
-                        writeln!(&mut buffered_out,"{}","⎯".repeat(30)).unwrap();
+                        writeln!(
+                            &mut buffered_out,
+                            "{}",
+                            pad_str_with(&format!("{thread_id:?}"), 30, Alignment::Center, None, '⎯')
+                        )
+                        .unwrap();
+                        writeln!(
+                            &mut buffered_out,
+                            "{}",
+                            style(pad_str(title, 30, Alignment::Center, None)).green()
+                        )
+                        .unwrap();
+                        writeln!(&mut buffered_out, "{}", "⎯".repeat(30)).unwrap();
                         buffered_out.flush().unwrap();
-                    },
-                    UIMessage { thread_id, message : UIUserMessage::ExitUi { root_node: root_node_duration, lds_root_node_duration} } => {
-
+                    }
+                    UIMessage {
+                        thread_id,
+                        message:
+                            UIUserMessage::ExitUi {
+                                root_node: root_node_duration,
+                                lds_root_node_duration,
+                            },
+                    } => {
                         let final_time = start_time.elapsed().as_secs_f64();
-                        writeln!(&mut buffered_out,"{}",pad_str_with("Statistics",30,Alignment::Center, None, '⎯')).unwrap();
+                        writeln!(
+                            &mut buffered_out,
+                            "{}",
+                            pad_str_with("Statistics", 30, Alignment::Center, None, '⎯')
+                        )
+                        .unwrap();
                         writeln!(&mut buffered_out,"total_lp_time: {total_lp_runtime:>8.2}s / total_pricing_time: {total_pricing_runtime:>8.2}s").unwrap();
 
                         let num_threads = seen_threads_this_phase.len();
 
-
-                        let overhead =    (final_time  * num_threads  as f64) - total_lp_runtime -  total_pricing_runtime
+                        let overhead = (final_time  * num_threads  as f64) - total_lp_runtime -  total_pricing_runtime
                             // subtract root node as there only one thread is busy
                             - root_node_duration.map_or(0.0, |rn| rn.as_secs_f64() * (num_threads  - 1) as f64) - lds_root_node_duration.map_or(0.0, |rn| rn.as_secs_f64() * (num_threads  - 1) as f64);
 
-
-                        writeln!(&mut buffered_out,"'overhead': {:>8.2}s  ({:>3.1}%) (in {} threads)", overhead, overhead/(final_time *  num_threads as f64) * 100.0, num_threads).unwrap();
+                        writeln!(
+                            &mut buffered_out,
+                            "'overhead': {:>8.2}s  ({:>3.1}%) (in {} threads)",
+                            overhead,
+                            overhead / (final_time * num_threads as f64) * 100.0,
+                            num_threads
+                        )
+                        .unwrap();
                         if num_threads > 1 {
-                            writeln!(&mut buffered_out, "{}", style(" in multithreaded env: idle time during root node is not included!").dim()).unwrap();
+                            writeln!(
+                                &mut buffered_out,
+                                "{}",
+                                style(" in multithreaded env: idle time during root node is not included!").dim()
+                            )
+                            .unwrap();
                         }
-                        writeln!(&mut buffered_out,"{:>3.1}% spent in pricing vs lp", total_pricing_runtime / (total_lp_runtime + total_pricing_runtime) * 100.0).unwrap();
-                        writeln!(&mut buffered_out,"{}","⎯".repeat(30)).unwrap();
-
+                        writeln!(
+                            &mut buffered_out,
+                            "{:>3.1}% spent in pricing vs lp",
+                            total_pricing_runtime / (total_lp_runtime + total_pricing_runtime) * 100.0
+                        )
+                        .unwrap();
+                        writeln!(&mut buffered_out, "{}", "⎯".repeat(30)).unwrap();
 
                         buffered_out.flush().unwrap();
 
-                        break
-                    },
+                        break;
+                    }
 
-                    UIMessage { thread_id, message : UIUserMessage::BranchStart(branch_state) } => {
-                        writeln!(&mut buffered_out,"[{t:?}] {time:>6.2} started   branch {branch}",
-                                 t=thread_id,
-                                 time = start_time.elapsed().as_secs_f64(),
-                                 branch=branch_state
-                        ).unwrap();
+                    UIMessage {
+                        thread_id,
+                        message: UIUserMessage::BranchStart(branch_state),
+                    } => {
+                        writeln!(
+                            &mut buffered_out,
+                            "[{t:?}] {time:>6.2} started   branch {branch}",
+                            t = thread_id,
+                            time = start_time.elapsed().as_secs_f64(),
+                            branch = branch_state
+                        )
+                        .unwrap();
                         buffered_out.flush().unwrap();
 
                         branch_start_order += 1;
@@ -174,18 +241,21 @@ impl UI {
                                                            num_filters = branch_state.num_filters,
                                                            special = branch_state.special
                         ).as_bytes()).unwrap();
-
-                    },
-                    UIMessage { thread_id, message : UIUserMessage::BranchFinish(branch_state) } => {
-
-                        writeln!(&mut buffered_out,"[{t:?}] {time:>6.2} completed branch {branch}",
-                                 t=thread_id,
-                                 time = start_time.elapsed().as_secs_f64(),
-                                 branch=branch_state
-                        ).unwrap();
+                    }
+                    UIMessage {
+                        thread_id,
+                        message: UIUserMessage::BranchFinish(branch_state),
+                    } => {
+                        writeln!(
+                            &mut buffered_out,
+                            "[{t:?}] {time:>6.2} completed branch {branch}",
+                            t = thread_id,
+                            time = start_time.elapsed().as_secs_f64(),
+                            branch = branch_state
+                        )
+                        .unwrap();
 
                         branch_finish_order += 1;
-
 
                         #[cfg(feature = "branch-graphviz")]
                         graphviz_branch_file.write(format!("{id} [shape=\"plaintext\" label=<<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\"><TR><TD>{id}</TD><TD>#{branch_finish_order}</TD><TD>{before_obj:.5} → {after_obj:.5}</TD><TD>{best_obj:.2}</TD></TR><TR><TD>f:{num_filters}</TD><TD COLSPAN=\"3\">{last_filter}</TD></TR><TR><TD COLSPAN=\"4\">{special}</TD></TR></TABLE>>];\n",
@@ -198,74 +268,96 @@ impl UI {
                                                             num_filters = branch_state.num_filters,
                                            special = branch_state.special
                         ).as_bytes()).unwrap();
-
                     }
 
-                    UIMessage { thread_id, message : UIUserMessage::LPSolveIterationFinish(state) } => {
+                    UIMessage {
+                        thread_id,
+                        message: UIUserMessage::LPSolveIterationFinish(state),
+                    } => {
                         total_lp_runtime += state.lp_runtime;
 
-                        writeln!(&mut buffered_out, "{}", style(format!("[{t:?}] {time:>6.2} lp iteration {state}",
-                                 t=thread_id,
-                                 time = start_time.elapsed().as_secs_f64(),
-                                 state=state
-                        )).dim()).unwrap();
-
+                        writeln!(
+                            &mut buffered_out,
+                            "{}",
+                            style(format!(
+                                "[{t:?}] {time:>6.2} lp iteration {state}",
+                                t = thread_id,
+                                time = start_time.elapsed().as_secs_f64(),
+                                state = state
+                            ))
+                            .dim()
+                        )
+                        .unwrap();
                     }
-                    UIMessage { thread_id, message : UIUserMessage::PricingProblemFinish(state) } => {
-
+                    UIMessage {
+                        thread_id,
+                        message: UIUserMessage::PricingProblemFinish(state),
+                    } => {
                         // always needed for statistics
                         total_pricing_runtime += state.runtime;
 
-
                         /* noisy*/
-                        writeln!(&mut buffered_out, "{}", style(format!("[{t:?}] {time:>6.2} pricing iteration {state}",
-                                 t=thread_id,
-                                 time = start_time.elapsed().as_secs_f64(),
-                                 state=state
-                        )).dim()).unwrap();
-
+                        writeln!(
+                            &mut buffered_out,
+                            "{}",
+                            style(format!(
+                                "[{t:?}] {time:>6.2} pricing iteration {state}",
+                                t = thread_id,
+                                time = start_time.elapsed().as_secs_f64(),
+                                state = state
+                            ))
+                            .dim()
+                        )
+                        .unwrap();
                     }
 
-                    UIMessage { thread_id, message : UIUserMessage::NewBest{branch_id, obj} } => {
-
-                        writeln!(&mut buffered_out,"[{:?}] {:>6.2}  {} {}", thread_id,start_time.elapsed().as_secs_f64(),style("Has new best:").black().on_green().bold(),  style(obj.to_string()).bold()).unwrap();
+                    UIMessage {
+                        thread_id,
+                        message: UIUserMessage::NewBest { branch_id, obj },
+                    } => {
+                        writeln!(
+                            &mut buffered_out,
+                            "[{:?}] {:>6.2}  {} {}",
+                            thread_id,
+                            start_time.elapsed().as_secs_f64(),
+                            style("Has new best:").black().on_green().bold(),
+                            style(obj.to_string()).bold()
+                        )
+                        .unwrap();
                         buffered_out.flush().unwrap();
 
                         #[cfg(feature = "branch-graphviz")]
-                        graphviz_branch_file.write(format!("{id} [style=\"filled\" fillcolor=\"lightgreen\"];\n",
-                                                           id=branch_id
-
-                        ).as_bytes()).unwrap();
+                        graphviz_branch_file
+                            .write(
+                                format!("{id} [style=\"filled\" fillcolor=\"lightgreen\"];\n", id = branch_id)
+                                    .as_bytes(),
+                            )
+                            .unwrap();
                     }
-
-
-
                 }
             }
 
             buffered_out.flush().unwrap();
         });
 
-
         Self {
-            sender : UISender { sender }
+            sender: UISender { sender },
         }
-
     }
 }
 
 #[derive(Clone)]
 pub struct BranchUIState {
-    pub branch_id : u32,
-    pub branch_parent : u32,
-    pub num_columns : usize,
-    pub current_open : usize,
-    pub num_filters : usize,
-    pub last_filter : String,
-    pub special : String,
-    pub before_obj : f64,
-    pub after_obj : Option<f64>, // not set in branch start
-    pub best_obj : f64
+    pub branch_id: u32,
+    pub branch_parent: u32,
+    pub num_columns: usize,
+    pub current_open: usize,
+    pub num_filters: usize,
+    pub last_filter: String,
+    pub special: String,
+    pub before_obj: f64,
+    pub after_obj: Option<f64>, // not set in branch start
+    pub best_obj: f64,
 }
 
 impl Display for BranchUIState {
@@ -280,61 +372,78 @@ impl Display for BranchUIState {
 #[derive(Clone)]
 /// Holds all state updates that can influence the UI
 pub enum UIUserMessage {
-    LogS( &'static str),
-    Log( String),
+    LogS(&'static str),
+    Log(String),
     TimeLimitReached,
     StartPhase(&'static str, u8),
-    ExitUi { root_node : Option<Duration>, lds_root_node_duration : Option<Duration>},
+    ExitUi {
+        root_node: Option<Duration>,
+        lds_root_node_duration: Option<Duration>,
+    },
     StartWorker,
 
     BranchStart(BranchUIState),
     BranchFinish(BranchUIState),
-    BranchCut { branch_id : u32},
+    BranchCut {
+        branch_id: u32,
+    },
 
     LPSolveIterationFinish(LPSolveIterationUIState),
     PricingProblemFinish(PricingProblemUIState),
 
-    NewBest {    obj : f64,   branch_id : u32}
+    NewBest {
+        obj: f64,
+        branch_id: u32,
+    },
 }
 
 #[derive(Clone)]
 pub struct PricingProblemUIState {
-    pub runtime : f64,
-    pub num_columns : usize,
-    pub dual_bound : f64
+    pub runtime: f64,
+    pub num_columns: usize,
+    pub dual_bound: f64,
 }
 
 impl Display for PricingProblemUIState {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "pricing_runtime=<{:>5.2}> num_cols=<{}> dual_bound=<{}>",  self.runtime , self.num_columns, self.dual_bound )
+        write!(
+            f,
+            "pricing_runtime=<{:>5.2}> num_cols=<{}> dual_bound=<{}>",
+            self.runtime, self.num_columns, self.dual_bound
+        )
     }
 }
 
 #[derive(Clone)]
-pub struct NewBestUIState {
-
-}
-
+pub struct NewBestUIState {}
 
 #[derive(Clone)]
 pub struct LPSolveIterationUIState {
-    pub obj : f64,
-    pub best_dual_bound : Option<f64>,
-    pub lp_runtime : f64,
-    pub num_columns : usize,
-    pub num_total_pool_columns : usize,
-    pub previous_pricing_runtime : f64
+    pub obj: f64,
+    pub best_dual_bound: Option<f64>,
+    pub lp_runtime: f64,
+    pub num_columns: usize,
+    pub num_total_pool_columns: usize,
+    pub previous_pricing_runtime: f64,
 }
 
 impl Display for LPSolveIterationUIState {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "obj=<{:>10.8}> bound=<{}>: lp_runtime=<{:>5.2}> prev_pricing_runtime=<{:>5.2}> cols=<{}/{}>", self.obj, self.best_dual_bound.map_or("-".to_string(), |db| format!("{db:>10.8}")), self.lp_runtime, self.previous_pricing_runtime, self.num_columns, self.num_total_pool_columns )
+        write!(
+            f,
+            "obj=<{:>10.8}> bound=<{}>: lp_runtime=<{:>5.2}> prev_pricing_runtime=<{:>5.2}> cols=<{}/{}>",
+            self.obj,
+            self.best_dual_bound.map_or("-".to_string(), |db| format!("{db:>10.8}")),
+            self.lp_runtime,
+            self.previous_pricing_runtime,
+            self.num_columns,
+            self.num_total_pool_columns
+        )
     }
 }
 
-
 #[derive(Clone)]
-pub struct  UIMessage {
-   pub thread_id : ThreadId,
-    pub message : UIUserMessage
+pub struct UIMessage {
+    pub thread_id: ThreadId,
+    pub message: UIUserMessage,
 }

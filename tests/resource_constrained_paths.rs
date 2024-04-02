@@ -10,20 +10,16 @@ mod tests {
     use generic_bnp::misc::{FullHashMap, HashMap};
     use generic_bnp::solvers::gurobi::GurobiEnv;
     use generic_bnp::{
-         BranchAndPrice, IBranchFilter, LDSSelection, LDSSettings, LPModel, StabilizationSettings, UISender, UserDualStore, UserMasterProblem, UserModelMeta, UserPricingSolver, INT_FEAS_TOL, UI
+        BranchAndPrice, IBranchFilter, LDSSelection, LDSSettings, LPModel, StabilizationSettings, UISender,
+        UserDualStore, UserMasterProblem, UserModelMeta, UserPricingSolver, INT_FEAS_TOL, UI,
     };
-
 
     use std::borrow::Cow;
     use std::fmt::{Debug, Display, Formatter};
     use std::hash::Hash;
-    
-
 
     use petgraph::algo::simple_paths;
     use petgraph::prelude::*;
-
-
 
     // implementing the problem instance data struct
     #[derive(Debug, Clone)]
@@ -42,12 +38,7 @@ mod tests {
     #[derive(Debug, Clone)]
     struct ProblemNode {}
 
-
-
-
-
     // the master problem
-
 
     // describe a column
     #[derive(PartialEq, Eq, Hash, Clone, Debug)]
@@ -56,7 +47,6 @@ mod tests {
         cost: u32,
         time: u32,
     }
-
 
     // struct holding the master problem model
     struct ModelMeta {
@@ -74,7 +64,6 @@ mod tests {
             &mut self.column_vars
         }
     }
-
 
     // the dual storage object
     #[derive(Clone, Debug)]
@@ -94,8 +83,6 @@ mod tests {
         }
     }
 
-
-
     // the branching structs
     #[derive(Clone, Debug, Eq, PartialEq, Hash)]
     enum Branch {
@@ -111,12 +98,10 @@ mod tests {
         }
     }
 
-
     #[derive(Debug, Clone)]
     enum BranchGroupType {
         Default,
     }
-
 
     // setting up the master problem
 
@@ -134,7 +119,7 @@ mod tests {
             DualStorage,
             ModelMeta,
             Branch,
-            BranchGroupType
+            BranchGroupType,
         > for ShortestPathsMasterProblem
     {
         fn new(problem_instance: &ShortestPathsProblem, ui: UISender) -> Self {
@@ -165,7 +150,6 @@ mod tests {
             _integer: bool,
             master: &mut gurobi::Model,
         ) -> ModelMeta {
-
             let convexity_constraint = master
                 .add_constr("convexity", gurobi::LinExpr::new(), gurobi::Equal, 1.0)
                 .unwrap();
@@ -210,44 +194,32 @@ mod tests {
             column_pool: &ColumnPool<ColumnData, Branch>,
             patterns: &[(f64, ColumnId)],
         ) -> Vec<BranchGroup<Branch, BranchGroupType>> {
-            
             let mut edge_hash: FullHashMap<EdgeIndex, f64> = FullHashMap::default();
-        
+
             // aggregate edge usage of all selected columns
-            patterns
-                .iter()
-                .filter(|(z, _)| *z > 0.0)
-                .for_each(|(z, cid)| {
-                    column_pool
-                        .get_column(*cid)
-                        .data
-                        .path
-                        .iter()
-                        .for_each(|pe| {
-                            *(edge_hash.entry(*pe).or_insert(0.0)) += *z;
-                        })
-                });
+            patterns.iter().filter(|(z, _)| *z > 0.0).for_each(|(z, cid)| {
+                column_pool.get_column(*cid).data.path.iter().for_each(|pe| {
+                    *(edge_hash.entry(*pe).or_insert(0.0)) += *z;
+                })
+            });
 
             // for every fractional edge, add branches that would separate there
-            edge_hash.iter()
+            edge_hash
+                .iter()
                 .filter(|v| v.1.fract() > 0.0)
                 .map(|(edge, _value)| {
-                BranchGroup::new(
-                    vec![
-                        vec![Branch::ForceEdge(*edge, true)],
-                        vec![Branch::ForceEdge(*edge, false)],
-                    ],
-                    BranchGroupType::Default,
-                )
-
-            }).collect()
+                    BranchGroup::new(
+                        vec![
+                            vec![Branch::ForceEdge(*edge, true)],
+                            vec![Branch::ForceEdge(*edge, false)],
+                        ],
+                        BranchGroupType::Default,
+                    )
+                })
+                .collect()
         }
 
-        fn create_column_forcing_filter(
-            &self,
-            column: &Column<ColumnData>,
-            direction: bool,
-        ) -> Branch {
+        fn create_column_forcing_filter(&self, column: &Column<ColumnData>, direction: bool) -> Branch {
             // return non-generic branch type
             Branch::ForceColumn(column.id, direction)
         }
@@ -279,7 +251,6 @@ mod tests {
             _solver: &PricingSolver,
             integer: bool,
         ) -> gurobi::Var {
-
             // setup row: set constraints & coefficients
             let colconstrs: Vec<gurobi::Constr> = vec![
                 model_meta.convexity_constraint.clone(),
@@ -291,11 +262,7 @@ mod tests {
             master
                 .add_var(
                     &format!("col_{}", col.id.0),
-                    if integer {
-                        gurobi::Integer
-                    } else {
-                        gurobi::Continuous
-                    },
+                    if integer { gurobi::Integer } else { gurobi::Continuous },
                     f64::from(col.data.cost),
                     0.0,
                     gurobi::INFINITY,
@@ -312,7 +279,6 @@ mod tests {
             master: &mut gurobi::Model,
             model_meta: &mut ModelMeta,
         ) -> Result<(), ()> {
-
             for filter in active_filters {
                 if let Branch::ForceColumn(col, dir) = filter {
                     if let Some(var) = model_meta.column_vars.get(col) {
@@ -335,15 +301,18 @@ mod tests {
     }
 
     impl ColumnPoolFilter<ColumnData, Branch> for ColumnPool<ColumnData, Branch> {
-        fn filter_columns<'a>(&self, filters: &[Branch], columns: impl Iterator<Item=&'a Column<ColumnData>>) -> impl Iterator<Item=&'a Column<ColumnData>> {
+        fn filter_columns<'a>(
+            &self,
+            filters: &[Branch],
+            columns: impl Iterator<Item = &'a Column<ColumnData>>,
+        ) -> impl Iterator<Item = &'a Column<ColumnData>> {
             columns.filter(move |col| {
                 for filter in filters {
                     match filter {
-
                         Branch::ForceColumn(filter_col, dir) => {
                             if *filter_col == col.id && !(*dir) {
                                 // skip column if explicitly removed
-                                return  false;
+                                return false;
                             }
                         }
 
@@ -361,15 +330,12 @@ mod tests {
         }
     }
 
-
-
     // Implementing the pricing problem
 
     struct PricingSolver {
         instance: ShortestPathsProblem,
         ui: UISender,
     }
-
 
     impl UserPricingSolver<ShortestPathsProblem, Branch, ColumnData, DualStorage> for PricingSolver {
         fn new(problem_instance: &ShortestPathsProblem, ui: UISender) -> Self {
@@ -379,8 +345,6 @@ mod tests {
             }
         }
         fn solve(&mut self, active_filters: &[Branch], duals: &DualStorage) -> Vec<(f64, ColumnData)> {
-
-
             // create local copy of graph to apply branching constraints
             let mut local_graph = self.instance.graph.clone();
 
@@ -400,7 +364,6 @@ mod tests {
                             for e in edges_to_remove {
                                 local_graph.remove_edge(e);
                             }
-
                         } else {
                             // if we must NOT take an edge -> simply remove the edge
                             local_graph.remove_edge(*edge);
@@ -410,14 +373,13 @@ mod tests {
                 }
             }
 
-
             /* very naive shortest path implementation through enumeration:
-                Find all paths, calculate costs, then pick the one with lowest cost.
-                Allows for easy debugging of dual cost vectors + is feasible on the toy problem.
+               Find all paths, calculate costs, then pick the one with lowest cost.
+               Allows for easy debugging of dual cost vectors + is feasible on the toy problem.
 
-                (The petgraph bellman-ford implementation has no easy way to customize cost function,
-                and djikstra/a* do not work due to negative edge costs)
-             */
+               (The petgraph bellman-ford implementation has no easy way to customize cost function,
+               and djikstra/a* do not work due to negative edge costs)
+            */
 
             let all_paths = simple_paths::all_simple_paths::<Vec<_>, _>(
                 &local_graph,
@@ -426,7 +388,6 @@ mod tests {
                 0,
                 None,
             );
-
 
             let min_cost_path = all_paths
                 .map(|path| {
@@ -442,10 +403,7 @@ mod tests {
                     // compute costs
                     let cost_sum = visited_edges
                         .iter()
-                        .map(|e| {
-                            f64::from(local_graph[*e].cost)
-                                - duals.time * f64::from(local_graph[*e].time)
-                        })
+                        .map(|e| f64::from(local_graph[*e].cost) - duals.time * f64::from(local_graph[*e].time))
                         .sum::<f64>();
 
                     (cost_sum, visited_edges)
@@ -457,15 +415,8 @@ mod tests {
             // we could return multiple columns here, but the toy problem would then be
             // even more trivial
             if let Some((result_cost, result_path)) = min_cost_path {
-
-                let cost_sum = result_path
-                    .iter()
-                    .map(|e| u32::from(local_graph[*e].cost))
-                    .sum();
-                let time_sum = result_path
-                    .iter()
-                    .map(|e| u32::from(local_graph[*e].time))
-                    .sum();
+                let cost_sum = result_path.iter().map(|e| u32::from(local_graph[*e].cost)).sum();
+                let time_sum = result_path.iter().map(|e| u32::from(local_graph[*e].time)).sum();
 
                 let column = ColumnData {
                     path: result_path.to_vec(),
@@ -489,23 +440,15 @@ mod tests {
             column
                 .path
                 .iter()
-                .map(|e| {
-                    f64::from(self.instance.graph[*e].cost)
-                        - duals.time * f64::from(self.instance.graph[*e].time)
-                })
+                .map(|e| f64::from(self.instance.graph[*e].cost) - duals.time * f64::from(self.instance.graph[*e].time))
                 .sum::<f64>()
                 - duals.convexity
         }
 
-        fn bound_num_active_columns(
-            &self,
-            _best_int_obj: f64,
-            _current_best_used_columns: usize,
-        ) -> usize {
+        fn bound_num_active_columns(&self, _best_int_obj: f64, _current_best_used_columns: usize) -> usize {
             // optimal solution consists of a single column
             1
         }
-
     }
 
     #[test]
@@ -515,12 +458,12 @@ mod tests {
         // Time constrained shortest path problem, Ahuja et al., 1993, p. 599
         let mut problem_graph = StableDiGraph::new();
 
-        let n1 = problem_graph.add_node(ProblemNode { });
-        let n2 = problem_graph.add_node(ProblemNode { });
-        let n3 = problem_graph.add_node(ProblemNode { });
-        let n4 = problem_graph.add_node(ProblemNode { });
-        let n5 = problem_graph.add_node(ProblemNode { });
-        let n6 = problem_graph.add_node(ProblemNode { });
+        let n1 = problem_graph.add_node(ProblemNode {});
+        let n2 = problem_graph.add_node(ProblemNode {});
+        let n3 = problem_graph.add_node(ProblemNode {});
+        let n4 = problem_graph.add_node(ProblemNode {});
+        let n5 = problem_graph.add_node(ProblemNode {});
+        let n6 = problem_graph.add_node(ProblemNode {});
 
         problem_graph.add_edge(n1, n2, ProblemEdge { cost: 1, time: 10 });
         problem_graph.add_edge(n1, n3, ProblemEdge { cost: 10, time: 3 });

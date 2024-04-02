@@ -41,7 +41,8 @@ impl<ColumnType, FilterType> Default for ColumnPool<ColumnType, FilterType> {
 }
 
 impl<ColumnType, FilterType> ColumnPool<ColumnType, FilterType> {
-    #[must_use] pub fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         ColumnPool {
             local_column_counter: 0,
             columns: Vec::new(),
@@ -51,59 +52,65 @@ impl<ColumnType, FilterType> ColumnPool<ColumnType, FilterType> {
 }
 
 pub trait ColumnExporter<ColumnType> {
-    fn get_all_columns(&self) -> (ColumnTicket,Iter<Column<ColumnType>>);
+    fn get_all_columns(&self) -> (ColumnTicket, Iter<Column<ColumnType>>);
 }
 
 /// Trait to be implemented by the user.
 /// Given a list of branching filters, return only those
 /// columns that remain valid.
-pub trait ColumnPoolFilter<ColumnType, FilterType> : ColumnExporter<ColumnType> {
-
+pub trait ColumnPoolFilter<ColumnType, FilterType>: ColumnExporter<ColumnType> {
     /// This is the master function that is also dealing with ticket handling
     /// You likely want to override the function `filter_columns` only.
-    fn get_columns<'a>(&'a self, filters: &[FilterType], ticket : Option<ColumnTicket>) -> (ColumnTicket, impl Iterator<Item=&'a Column<ColumnType>>) where ColumnType: 'a {
-                // if we have an inbound ticket: only get those columns after the ticket
-                let (new_ticket, iter) = {
-                    let (tick, iter) = self.get_all_columns();
-                    (
-                        tick,
-                        iter.skip(if let Some(ticket) = ticket {
-                            ticket.0
-                        } else {
-                            0
-                        }),
-                    )
-                };
+    fn get_columns<'a>(
+        &'a self,
+        filters: &[FilterType],
+        ticket: Option<ColumnTicket>,
+    ) -> (ColumnTicket, impl Iterator<Item = &'a Column<ColumnType>>)
+    where
+        ColumnType: 'a,
+    {
+        // if we have an inbound ticket: only get those columns after the ticket
+        let (new_ticket, iter) = {
+            let (tick, iter) = self.get_all_columns();
+            (tick, iter.skip(if let Some(ticket) = ticket { ticket.0 } else { 0 }))
+        };
 
-                // dispatch filtering to separate function
-                let filtered_iterator = self.filter_columns(filters, iter);
-                return (new_ticket, filtered_iterator);
-
+        // dispatch filtering to separate function
+        let filtered_iterator = self.filter_columns(filters, iter);
+        return (new_ticket, filtered_iterator);
     }
 
     /// Override this function to implement filtering of the column pool based on the branches filters
     /// The default implementation performs no filtering at all
-    fn filter_columns<'a>(&self, filters: &[FilterType], columns : impl Iterator<Item=&'a Column<ColumnType>>) -> impl Iterator<Item=&'a Column<ColumnType>> where ColumnType : 'a {
+    fn filter_columns<'a>(
+        &self,
+        filters: &[FilterType],
+        columns: impl Iterator<Item = &'a Column<ColumnType>>,
+    ) -> impl Iterator<Item = &'a Column<ColumnType>>
+    where
+        ColumnType: 'a,
+    {
         return columns;
     }
 }
 
-impl<ColumnType,FilterType> ColumnExporter<ColumnType> for ColumnPool<ColumnType, FilterType> {
+impl<ColumnType, FilterType> ColumnExporter<ColumnType> for ColumnPool<ColumnType, FilterType> {
     /// Get Iterator of all columns in column pool and associated ticket
-    fn get_all_columns(&self) -> (ColumnTicket,Iter<Column<ColumnType>>) {
+    fn get_all_columns(&self) -> (ColumnTicket, Iter<Column<ColumnType>>) {
         (ColumnTicket(self.columns.len()), self.columns.iter())
     }
 }
 
 impl<ColumnType, FilterType> ColumnPool<ColumnType, FilterType> {
-
     /// Total number of columns in pool
-    #[must_use] pub fn count(&self) -> usize {
+    #[must_use]
+    pub fn count(&self) -> usize {
         self.columns.len()
     }
 
     /// Returns a specific column from the pool
-    #[must_use] pub fn get_column(&self, id: ColumnId) -> &Column<ColumnType> {
+    #[must_use]
+    pub fn get_column(&self, id: ColumnId) -> &Column<ColumnType> {
         let column_at_index = &self.columns[id.0 as usize];
 
         // make sure that our assumption that columns are ordered in the column pool is correct
@@ -113,20 +120,14 @@ impl<ColumnType, FilterType> ColumnPool<ColumnType, FilterType> {
         column_at_index
     }
 
-
-
-
     /// Adds a column to the column pool
-    /// The `column_ticket` that was handed out during `get_columns` 
-    /// must be returned, to ensure column pool consistency in a 
+    /// The `column_ticket` that was handed out during `get_columns`
+    /// must be returned, to ensure column pool consistency in a
     /// multithreaded environment
     pub fn add_column(&mut self, column_data: ColumnType, column_ticket: ColumnTicket) -> bool
     where
         ColumnType: PartialEq,
     {
-
-
-
         // in an multi threaded environment, another thread
         // might have added columns inbetween
         // we got a ticket="num_cols known" when retrieving the columns
@@ -137,28 +138,20 @@ impl<ColumnType, FilterType> ColumnPool<ColumnType, FilterType> {
             .columns
             .iter()
             .enumerate() // uses enumerate and indecies due to lifetime constraints
-            .skip(column_ticket.0).find_map(|( i ,c)| if c.data == column_data { Some(i)} else { None});
-
+            .skip(column_ticket.0)
+            .find_map(|(i, c)| if c.data == column_data { Some(i) } else { None });
 
         if let Some(column) = existing_column {
             // there was the same column within the pool
             return false;
-
         } else {
-
-
             #[cfg(feature = "validity_assertions")]
             {
                 // assert that we never regenerate the same column twice
-                let existing_columns  = self
-                    .columns
-                    .iter()
-                    .filter(|c| c.data == column_data)
-                    .next();
+                let existing_columns = self.columns.iter().filter(|c| c.data == column_data).next();
 
-                    assert!(existing_columns.is_none());
+                assert!(existing_columns.is_none());
             }
-
 
             let column = Column {
                 id: ColumnId(self.local_column_counter),
@@ -168,8 +161,7 @@ impl<ColumnType, FilterType> ColumnPool<ColumnType, FilterType> {
             self.local_column_counter += 1;
             self.columns.push(column);
 
-            return true
-
+            return true;
         }
     }
 }

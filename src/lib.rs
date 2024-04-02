@@ -5,97 +5,112 @@
 #![allow(clippy::items_after_statements)]
 #![allow(unused_variables, unused_imports, dead_code)]
 
-pub mod misc;
 mod generic_master_problem;
-mod ui;
+pub mod misc;
 pub mod solvers;
+mod ui;
 
+pub use generic_master_problem::*;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::thread;
-pub use generic_master_problem::*;
 
-pub use ui::*;
 use crate::branch::{Branch, BranchComparator};
 use crate::column_pool::{ColumnId, ColumnPool, ColumnPoolFilter};
 use crate::misc::blocking_queue::BlockingQueue;
-
+pub use ui::*;
 
 pub trait BnPFactory<Type, ProblemInstance> {
-    fn new(&self, instance : &ProblemInstance) -> Type;
+    fn new(&self, instance: &ProblemInstance) -> Type;
 }
 
-pub struct BranchAndPrice<BranchFilter: IBranchFilter, Column : PartialEq + 'static, DualStore : UserDualStore + Sync,  ModelMeta : UserModelMeta,
-    BranchGroupType : Clone + Debug + Send + Sync,
-    PricingSolver : UserPricingSolver<ProblemInstance, BranchFilter, Column, DualStore> ,
-    ProblemInstance : Clone + Send + Sync,
-    UMasterProblem : UserMasterProblem<ProblemInstance, PricingSolver, Column, DualStore, ModelMeta, BranchFilter, BranchGroupType> + Clone,
->
-where ColumnPool<Column, BranchFilter> : ColumnPoolFilter<Column, BranchFilter>{
-
-    _b : PhantomData<BranchFilter>,
-    _c : PhantomData<Column>,
+pub struct BranchAndPrice<
+    BranchFilter: IBranchFilter,
+    Column: PartialEq + 'static,
+    DualStore: UserDualStore + Sync,
+    ModelMeta: UserModelMeta,
+    BranchGroupType: Clone + Debug + Send + Sync,
+    PricingSolver: UserPricingSolver<ProblemInstance, BranchFilter, Column, DualStore>,
+    ProblemInstance: Clone + Send + Sync,
+    UMasterProblem: UserMasterProblem<ProblemInstance, PricingSolver, Column, DualStore, ModelMeta, BranchFilter, BranchGroupType>
+        + Clone,
+> where
+    ColumnPool<Column, BranchFilter>: ColumnPoolFilter<Column, BranchFilter>,
+{
+    _b: PhantomData<BranchFilter>,
+    _c: PhantomData<Column>,
     _bpt: PhantomData<BranchGroupType>,
     _mm: PhantomData<ModelMeta>,
     _ds: PhantomData<DualStore>,
     _pi: PhantomData<ProblemInstance>,
-    _ps : PhantomData<PricingSolver>,
-    _mp : PhantomData<UMasterProblem>,
+    _ps: PhantomData<PricingSolver>,
+    _mp: PhantomData<UMasterProblem>,
 
-
-    problem_instance : ProblemInstance,
+    problem_instance: ProblemInstance,
 }
 
-impl<BranchFilter: IBranchFilter + Sync + Send, Column : PartialEq + 'static + Clone + Send + Sync, DualStore : UserDualStore + Sync + Send,  ModelMeta : UserModelMeta,
-    BranchGroupType : Clone + Debug + Send + Sync,
-    PricingSolver : UserPricingSolver<ProblemInstance, BranchFilter, Column, DualStore>,
-    ProblemInstance: Clone + Send + Sync,
-    UMasterProblem : UserMasterProblem<ProblemInstance,PricingSolver, Column, DualStore, ModelMeta, BranchFilter, BranchGroupType> + Clone,
-> BranchAndPrice<BranchFilter, Column, DualStore, ModelMeta, BranchGroupType, PricingSolver, ProblemInstance, UMasterProblem> where ColumnPool<Column, BranchFilter> : ColumnPoolFilter<Column, BranchFilter>{
-    
-    
-    pub fn new(   problem_instance : ProblemInstance) -> Self {
-        
+impl<
+        BranchFilter: IBranchFilter + Sync + Send,
+        Column: PartialEq + 'static + Clone + Send + Sync,
+        DualStore: UserDualStore + Sync + Send,
+        ModelMeta: UserModelMeta,
+        BranchGroupType: Clone + Debug + Send + Sync,
+        PricingSolver: UserPricingSolver<ProblemInstance, BranchFilter, Column, DualStore>,
+        ProblemInstance: Clone + Send + Sync,
+        UMasterProblem: UserMasterProblem<
+                ProblemInstance,
+                PricingSolver,
+                Column,
+                DualStore,
+                ModelMeta,
+                BranchFilter,
+                BranchGroupType,
+            > + Clone,
+    >
+    BranchAndPrice<
+        BranchFilter,
+        Column,
+        DualStore,
+        ModelMeta,
+        BranchGroupType,
+        PricingSolver,
+        ProblemInstance,
+        UMasterProblem,
+    >
+where
+    ColumnPool<Column, BranchFilter>: ColumnPoolFilter<Column, BranchFilter>,
+{
+    pub fn new(problem_instance: ProblemInstance) -> Self {
         BranchAndPrice {
             _b: PhantomData,
             _c: PhantomData,
             _bpt: PhantomData,
             _mm: PhantomData,
             _ds: PhantomData,
-            _pi : PhantomData,
+            _pi: PhantomData,
             _ps: PhantomData,
             _mp: PhantomData,
 
-            problem_instance
+            problem_instance,
         }
     }
 
-
-    pub fn solve(&self, ui : &UI, num_threads : usize, column_pool : ColumnPool<Column, BranchFilter>) -> (f64, Vec<(f64, Column)>) {
-
-        let open_branches = BlockingQueue::new(
-            BranchComparator::with_bound(),
-            BranchComparator::without_bound()
-        );
-
-
+    pub fn solve(
+        &self,
+        ui: &UI,
+        num_threads: usize,
+        column_pool: ColumnPool<Column, BranchFilter>,
+    ) -> (f64, Vec<(f64, Column)>) {
+        let open_branches = BlockingQueue::new(BranchComparator::with_bound(), BranchComparator::without_bound());
 
         let shared = Arc::new(SharedState::new(column_pool, ui, None, open_branches));
-
-
-
-
-
 
         // start with phase main
         {
             *shared.phase.write().unwrap() = Phase::PrimalHeuristic;
         }
-        shared
-            .open_branches
-            .add_job(Branch::create_lds_root());
-
+        shared.open_branches.add_job(Branch::create_lds_root());
 
         shared.ui_sender.send(UIUserMessage::StartPhase("Primal Heuristic", 0));
         // run main
@@ -105,12 +120,9 @@ impl<BranchFilter: IBranchFilter + Sync + Send, Column : PartialEq + 'static + C
 
                 let pi = self.problem_instance.clone();
                 s.spawn(move || {
-                    let mp  = UMasterProblem::new(&pi, shared.ui_sender.clone());
+                    let mp = UMasterProblem::new(&pi, shared.ui_sender.clone());
                     let ps = PricingSolver::new(&pi, shared.ui_sender.clone());
-                    let mut master_problem = MasterProblem::new(
-                        shared,
-                        mp, ps
-                    );
+                    let mut master_problem = MasterProblem::new(shared, mp, ps);
                     master_problem.run_worker(0.0, f64::INFINITY, i as i32);
                 });
             }
@@ -120,9 +132,7 @@ impl<BranchFilter: IBranchFilter + Sync + Send, Column : PartialEq + 'static + C
         {
             *shared.phase.write().unwrap() = Phase::Main;
         }
-        shared
-            .open_branches
-            .add_job(Branch::default());
+        shared.open_branches.add_job(Branch::default());
 
         shared.ui_sender.send(UIUserMessage::StartPhase("Main Phase", 0));
         thread::scope(|s| {
@@ -131,12 +141,9 @@ impl<BranchFilter: IBranchFilter + Sync + Send, Column : PartialEq + 'static + C
 
                 let pi = self.problem_instance.clone();
                 s.spawn(move || {
-                    let mp  = UMasterProblem::new(&pi, shared.ui_sender.clone());
+                    let mp = UMasterProblem::new(&pi, shared.ui_sender.clone());
                     let ps = PricingSolver::new(&pi, shared.ui_sender.clone());
-                    let mut master_problem = MasterProblem::new(
-                        shared,
-                        mp, ps
-                    );
+                    let mut master_problem = MasterProblem::new(shared, mp, ps);
                     master_problem.run_worker(0.0, f64::INFINITY, i as i32);
                 });
             }
@@ -147,28 +154,17 @@ impl<BranchFilter: IBranchFilter + Sync + Send, Column : PartialEq + 'static + C
             lds_root_node_duration: *shared.duration_lds_root_node.lock().unwrap(),
         });
 
-
-        let (best,pattern) =  { shared.best.read().unwrap().to_owned() };
-
+        let (best, pattern) = { shared.best.read().unwrap().to_owned() };
 
         let columns: Vec<(f64, Column)> = pattern
             .iter()
             .filter(|(v, _)| *v > 0.0)
             .map(|(v, c)| {
-                let c = shared
-                    .column_pool
-                    .read()
-                    .unwrap()
-                    .get_column(*c)
-                    .data
-                    .clone();
-                (*v,c)
+                let c = shared.column_pool.read().unwrap().get_column(*c).data.clone();
+                (*v, c)
             })
             .collect();
 
-
         (best, columns)
     }
-    
-    
 }

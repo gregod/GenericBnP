@@ -8,13 +8,16 @@ mod tests {
 
     use generic_bnp::misc::{FullHashMap, HashMap};
     use generic_bnp::solvers::gurobi::GurobiEnv;
-    use generic_bnp::{BnPFactory, BranchAndPrice, IBranchFilter, LPModel, UISender, UserDualStore, UserMasterProblem, UserModelMeta, UserPricingSolver, INT_FEAS_TOL, UI, LPEnv};
+    use generic_bnp::{
+        BnPFactory, BranchAndPrice, IBranchFilter, LPEnv, LPModel, UISender, UserDualStore, UserMasterProblem,
+        UserModelMeta, UserPricingSolver, INT_FEAS_TOL, UI,
+    };
     use gurobi::{Constr, ConstrSense, Env, Less, LinExpr, Maximize, Model, Var, VarType};
     use itertools::Itertools;
     use std::borrow::Cow;
-    
+
     use std::fmt::{Debug, Display, Formatter};
-    use std::sync::{RwLock};
+    use std::sync::RwLock;
 
     struct PricingSolver {
         instance: CuttingStockProblem,
@@ -38,12 +41,7 @@ mod tests {
             model.set_objective(LinExpr::new(), Maximize).unwrap();
 
             let length_constraint = model
-                .add_constr(
-                    "length",
-                    LinExpr::new(),
-                    Less,
-                    f64::from(self.instance.length_rod),
-                )
+                .add_constr("length", LinExpr::new(), Less, f64::from(self.instance.length_rod))
                 .unwrap();
             let count_vars: Vec<Var> = self
                 .instance
@@ -95,18 +93,8 @@ mod tests {
                 .sum::<f64>()
         }
 
-        fn bound_num_active_columns(
-            &self,
-            best_int_obj: f64,
-            current_best_used_columns: usize,
-        ) -> usize {
-            usize::from(
-                self.instance
-                    .demand_for_pieces
-                    .iter()
-                    .map(|d| d.count.0)
-                    .sum::<u8>(),
-            )
+        fn bound_num_active_columns(&self, best_int_obj: f64, current_best_used_columns: usize) -> usize {
+            usize::from(self.instance.demand_for_pieces.iter().map(|d| d.count.0).sum::<u8>())
         }
     }
 
@@ -123,15 +111,11 @@ mod tests {
 
             let mut out: FullHashMap<PieceSize, f64> = FullHashMap::default();
 
-
             // self * alpha + out * (1-alpha)
 
             for self_size in &self.sizes {
                 let other_value = out_duals.sizes[self_size.0];
-                out.insert(
-                    *self_size.0,
-                    self_size.1 * alpha + other_value * (1.0 - alpha),
-                );
+                out.insert(*self_size.0, self_size.1 * alpha + other_value * (1.0 - alpha));
             }
 
             return Cow::Owned(DualStorage { sizes: out });
@@ -216,16 +200,8 @@ mod tests {
         instance: CuttingStockProblem,
     }
 
-    impl
-        UserMasterProblem<
-            CuttingStockProblem,
-            PricingSolver,
-            Column,
-            DualStorage,
-            ModelMeta,
-            Branch,
-            BranchGroupType
-        > for CuttingStockMasterProblem
+    impl UserMasterProblem<CuttingStockProblem, PricingSolver, Column, DualStorage, ModelMeta, Branch, BranchGroupType>
+        for CuttingStockMasterProblem
     {
         fn new(problem_instance: &CuttingStockProblem, ui: UISender) -> Self {
             CuttingStockMasterProblem {
@@ -237,8 +213,6 @@ mod tests {
         fn get_ui(&self) -> &UISender {
             &self.ui
         }
-
-
 
         fn create_column_forcing_filter(
             &self,
@@ -277,11 +251,7 @@ mod tests {
             master
                 .add_var(
                     &format!("column_var[{:?}]", col.id),
-                    if integer {
-                        VarType::Integer
-                    } else {
-                        VarType::Continuous
-                    },
+                    if integer { VarType::Integer } else { VarType::Continuous },
                     1.0,
                     0.0,
                     f64::INFINITY,
@@ -347,12 +317,7 @@ mod tests {
             Ok(())
         }
 
-        fn get_duals_from_model(
-            &self,
-            solver: &PricingSolver,
-            master: &Model,
-            model_meta: &ModelMeta,
-        ) -> DualStorage {
+        fn get_duals_from_model(&self, solver: &PricingSolver, master: &Model, model_meta: &ModelMeta) -> DualStorage {
             let dual_vec: FullHashMap<PieceSize, f64> = model_meta
                 .demand_constr
                 .iter()
@@ -373,9 +338,7 @@ mod tests {
         }
     }
 
-
-    impl ColumnPoolFilter<Column, Branch> for ColumnPool<Column, Branch> {
-    }
+    impl ColumnPoolFilter<Column, Branch> for ColumnPool<Column, Branch> {}
 
     #[test]
     fn run() {
@@ -441,11 +404,10 @@ mod tests {
                 column_pool.add_column(c, ColumnTicket(0));
             });
 
-        let (best,results) = bnp.solve(&ui, 1, column_pool);
+        let (best, results) = bnp.solve(&ui, 1, column_pool);
 
         assert_eq!(best.ceil(), 13.0);
 
         println!("Results: {:?}", results);
-
     }
 }

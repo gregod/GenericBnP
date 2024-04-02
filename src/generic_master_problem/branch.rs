@@ -1,37 +1,32 @@
 use std::fmt::{Debug, Display};
 
-
-
-
 use std::sync::atomic::{AtomicU32, Ordering};
-
 
 static BRANCH_ID_COUNTER: AtomicU32 = AtomicU32::new(0);
 
-
-
 #[derive(Clone)]
-pub struct BranchComparator<BranchingFilter : IBranchFilter,DualStorage : UserDualStore>  {
+pub struct BranchComparator<BranchingFilter: IBranchFilter, DualStorage: UserDualStore> {
     has_bound: bool,
-    _bf : PhantomData<BranchingFilter>,
-    _ds : PhantomData<DualStorage>
+    _bf: PhantomData<BranchingFilter>,
+    _ds: PhantomData<DualStorage>,
 }
 
-impl<BranchingFilter : IBranchFilter,DualStorage : UserDualStore> BranchComparator<BranchingFilter, DualStorage>  {
-
-    #[must_use] pub fn with_bound() -> Self {
+impl<BranchingFilter: IBranchFilter, DualStorage: UserDualStore> BranchComparator<BranchingFilter, DualStorage> {
+    #[must_use]
+    pub fn with_bound() -> Self {
         Self {
-            has_bound : true,
-            _bf : PhantomData,
-            _ds : PhantomData
+            has_bound: true,
+            _bf: PhantomData,
+            _ds: PhantomData,
         }
     }
 
-    #[must_use] pub fn without_bound() -> Self {
+    #[must_use]
+    pub fn without_bound() -> Self {
         Self {
-            has_bound : false,
-            _bf : PhantomData,
-            _ds : PhantomData
+            has_bound: false,
+            _bf: PhantomData,
+            _ds: PhantomData,
         }
     }
 
@@ -45,7 +40,9 @@ impl<BranchingFilter : IBranchFilter,DualStorage : UserDualStore> BranchComparat
     }
 }
 
-impl<BranchingFilter : IBranchFilter,DualStorage : UserDualStore> Compare<Branch<BranchingFilter, DualStorage>> for BranchComparator<BranchingFilter, DualStorage>  {
+impl<BranchingFilter: IBranchFilter, DualStorage: UserDualStore> Compare<Branch<BranchingFilter, DualStorage>>
+    for BranchComparator<BranchingFilter, DualStorage>
+{
     fn compare(
         &self,
         l: &Branch<BranchingFilter, DualStorage>,
@@ -53,11 +50,11 @@ impl<BranchingFilter : IBranchFilter,DualStorage : UserDualStore> Compare<Branch
     ) -> core::cmp::Ordering {
         if let (
             Some(SpecialType::LDSBranch {
-                     taboo_filters: ref taboo_filters_l,
-                 }),
+                taboo_filters: ref taboo_filters_l,
+            }),
             Some(SpecialType::LDSBranch {
-                     taboo_filters: ref taboo_filters_r,
-                 }),
+                taboo_filters: ref taboo_filters_r,
+            }),
         ) = (&l.special, &r.special)
         {
             // in lds branches, go for discrepancy then depth
@@ -75,34 +72,29 @@ impl<BranchingFilter : IBranchFilter,DualStorage : UserDualStore> Compare<Branch
     }
 }
 
-
 #[derive(Debug, Clone)]
 /// Indicates a special type of branch
-pub enum SpecialType<BranchFilter : IBranchFilter> {
+pub enum SpecialType<BranchFilter: IBranchFilter> {
     Root,
     Integer,
-    LDSBranch { taboo_filters : HashSet<BranchFilter> }
+    LDSBranch { taboo_filters: HashSet<BranchFilter> },
 }
+use compare::Compare;
 use core::fmt::Formatter;
 use std::marker::PhantomData;
-use compare::Compare;
 
-impl<BranchFilter : IBranchFilter> Display for SpecialType<BranchFilter > {
-
+impl<BranchFilter: IBranchFilter> Display for SpecialType<BranchFilter> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            SpecialType::Root =>  write!(f,"Root"),
-            SpecialType::Integer =>  write!(f,"Integer"),
-            LDSBranch { taboo_filters} => {
+            SpecialType::Root => write!(f, "Root"),
+            SpecialType::Integer => write!(f, "Integer"),
+            LDSBranch { taboo_filters } => {
                 write!(f, "LDS(").unwrap();
                 taboo_filters.iter().for_each(|filter| write!(f, "{filter},").unwrap());
                 write!(f, ")")
             }
         }
-
     }
-
-
 }
 
 #[derive(Debug, Clone)]
@@ -111,32 +103,28 @@ impl<BranchFilter : IBranchFilter> Display for SpecialType<BranchFilter > {
 pub struct Branch<BranchFilter, DualStore>
 where
     BranchFilter: IBranchFilter,
-        DualStore : UserDualStore
+    DualStore: UserDualStore,
 {
     pub id: u32,
     pub parent: u32,
     pub depth: u32,
     pub old_obj_bound: f64, // objective value before adding filtr
     pub old_obj_heuristic: bool,
-    pub old_obj_dual_center: Option<(f64,DualStore)>,
+    pub old_obj_dual_center: Option<(f64, DualStore)>,
     pub filters: Vec<BranchFilter>,
-    pub allow_heuristic_pricing : bool,
+    pub allow_heuristic_pricing: bool,
     pub special: Option<SpecialType<BranchFilter>>,
 }
 
-use crate::{IBranchFilter, UserDualStore};
 use crate::branch::SpecialType::LDSBranch;
 use crate::misc::HashSet;
-
-
+use crate::{IBranchFilter, UserDualStore};
 
 impl<BranchFilter, DualStore> Branch<BranchFilter, DualStore>
 where
     BranchFilter: IBranchFilter,
-    DualStore : UserDualStore
-
+    DualStore: UserDualStore,
 {
-
     /// Returns the initial root node, initialized with default values
     pub fn default() -> Self {
         let id = BRANCH_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
@@ -146,8 +134,8 @@ where
             parent: id,
             old_obj_bound: f64::NEG_INFINITY,
             old_obj_heuristic: false,
-            old_obj_dual_center : None,
-            allow_heuristic_pricing : true,
+            old_obj_dual_center: None,
+            allow_heuristic_pricing: true,
             filters: Vec::default(),
             special: Some(SpecialType::Root),
         }
@@ -160,13 +148,13 @@ where
             id,
             depth: 0,
             parent: id,
-            allow_heuristic_pricing : true,
+            allow_heuristic_pricing: true,
             old_obj_bound: f64::NEG_INFINITY,
             old_obj_heuristic: false,
-            old_obj_dual_center : None,
+            old_obj_dual_center: None,
             filters: Vec::default(),
             special: Some(SpecialType::LDSBranch {
-                taboo_filters : HashSet::default(),
+                taboo_filters: HashSet::default(),
             }),
         }
     }
@@ -177,18 +165,18 @@ where
     ///
     /// `local` setting influences whether existing branches should apply
     ///         or (local=false) all branching constraints are removed
-    pub fn create_integer(&self, local : bool) -> Self {
+    pub fn create_integer(&self, local: bool) -> Self {
         let new_id = BRANCH_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
 
         Branch {
             id: new_id,
             parent: self.id,
             depth: self.depth,
-            allow_heuristic_pricing : false,
+            allow_heuristic_pricing: false,
             old_obj_bound: self.old_obj_bound,
             old_obj_heuristic: self.old_obj_heuristic,
-            old_obj_dual_center : self.old_obj_dual_center.clone(),
-            filters: if local { self.filters.clone()} else { vec![] },
+            old_obj_dual_center: self.old_obj_dual_center.clone(),
+            filters: if local { self.filters.clone() } else { vec![] },
             special: Some(SpecialType::Integer),
         }
     }
@@ -202,10 +190,10 @@ where
             id: new_id,
             parent: self.id,
             depth: self.depth,
-            allow_heuristic_pricing : false,
+            allow_heuristic_pricing: false,
             old_obj_bound: self.old_obj_bound,
             old_obj_heuristic: self.old_obj_heuristic,
-            old_obj_dual_center : self.old_obj_dual_center.clone(),
+            old_obj_dual_center: self.old_obj_dual_center.clone(),
             filters: self.filters.clone(),
             special: self.special.clone(),
         }
@@ -213,39 +201,51 @@ where
 
     /// Given a current lds branching node,
     /// create the zero branch that expands the taboo list
-    pub fn create_lds_zero_child(&self, parent_obj: f64, filters_of_one_child: &[BranchFilter], parent_partial : bool, parent_dual_center : Option<(f64, DualStore)>) -> Self {
-
-
+    pub fn create_lds_zero_child(
+        &self,
+        parent_obj: f64,
+        filters_of_one_child: &[BranchFilter],
+        parent_partial: bool,
+        parent_dual_center: Option<(f64, DualStore)>,
+    ) -> Self {
         // get current taboo list
-        let mut taboo_list = if let Some(SpecialType::LDSBranch{ taboo_filters}) = &self.special { taboo_filters.clone()} else { unreachable!()};
+        let mut taboo_list = if let Some(SpecialType::LDSBranch { taboo_filters }) = &self.special {
+            taboo_filters.clone()
+        } else {
+            unreachable!()
+        };
 
         for filter in filters_of_one_child {
             taboo_list.insert(filter.clone());
         }
-
-
 
         let new_id = BRANCH_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
         Branch {
             id: new_id,
             parent: self.id,
             depth: self.depth,
-            allow_heuristic_pricing : self.allow_heuristic_pricing,
+            allow_heuristic_pricing: self.allow_heuristic_pricing,
             old_obj_bound: parent_obj,
             old_obj_heuristic: parent_partial,
-            old_obj_dual_center : parent_dual_center,
+            old_obj_dual_center: parent_dual_center,
             filters: self.filters.clone(),
-            special : Some(LDSBranch { taboo_filters : taboo_list})
+            special: Some(LDSBranch {
+                taboo_filters: taboo_list,
+            }),
         }
     }
 
     /// Given a current lds branching node,
     /// create the branch forcing a column
-    pub fn create_lds_one_child(&self, parent_obj: f64, filter: Vec<BranchFilter>, parent_partial : bool, parent_dual_center : Option<(f64, DualStore)>) -> Self {
-
-        let mut new_filters  = self.filters.clone();
+    pub fn create_lds_one_child(
+        &self,
+        parent_obj: f64,
+        filter: Vec<BranchFilter>,
+        parent_partial: bool,
+        parent_dual_center: Option<(f64, DualStore)>,
+    ) -> Self {
+        let mut new_filters = self.filters.clone();
         new_filters.extend(filter);
-
 
         let new_id = BRANCH_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
         Branch {
@@ -253,20 +253,23 @@ where
             parent: self.id,
             depth: self.depth + 1,
             old_obj_bound: parent_obj,
-            allow_heuristic_pricing : self.allow_heuristic_pricing,
+            allow_heuristic_pricing: self.allow_heuristic_pricing,
             old_obj_heuristic: parent_partial,
-            old_obj_dual_center : parent_dual_center,
+            old_obj_dual_center: parent_dual_center,
             filters: new_filters,
-            special : self.special.clone()
+            special: self.special.clone(),
         }
-
     }
 
     /// Given a branching node, create a child node with
     /// additional branching filter applied
-    pub fn create_child(&self, parent_obj: f64, filter: Vec<BranchFilter>, parent_partial : bool, parent_dual_center : Option<(f64,DualStore)>) -> Self {
-
-
+    pub fn create_child(
+        &self,
+        parent_obj: f64,
+        filter: Vec<BranchFilter>,
+        parent_partial: bool,
+        parent_dual_center: Option<(f64, DualStore)>,
+    ) -> Self {
         let mut new_filters = self.filters.clone();
         new_filters.extend(filter);
 
@@ -276,12 +279,12 @@ where
             id: new_id,
             parent: self.id,
             depth: self.depth + 1,
-            allow_heuristic_pricing : self.allow_heuristic_pricing,
+            allow_heuristic_pricing: self.allow_heuristic_pricing,
             old_obj_bound: parent_obj,
             old_obj_heuristic: parent_partial,
-            old_obj_dual_center : parent_dual_center,
+            old_obj_dual_center: parent_dual_center,
             filters: new_filters,
-            special : None
+            special: None,
         }
     }
 }
@@ -302,9 +305,9 @@ impl<BranchFilter, BranchGroupType> BranchGroup<BranchFilter, BranchGroupType>
 where
     BranchGroupType: Debug,
 {
-    pub fn new(filters : Vec<Vec<BranchFilter>>, branch_group_type: BranchGroupType) -> Self {
+    pub fn new(filters: Vec<Vec<BranchFilter>>, branch_group_type: BranchGroupType) -> Self {
         Self {
-           filters,
+            filters,
             branch_group_type,
         }
     }

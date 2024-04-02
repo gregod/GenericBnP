@@ -1,13 +1,10 @@
 use crate::{LPEnv, LPModel, UserModelMeta};
-use gurobi::{param,attr};
+use gurobi::{attr, param};
 
-pub struct  GurobiEnv(pub gurobi::Env);
-
-
+pub struct GurobiEnv(pub gurobi::Env);
 
 impl LPEnv for GurobiEnv {
     fn new_with_seed(seed: i32) -> Self {
-
         let mut env = gurobi::Env::new("").unwrap();
         env.set(param::Threads, 1).unwrap();
         env.set(param::Seed, seed).unwrap();
@@ -18,16 +15,12 @@ impl LPEnv for GurobiEnv {
     fn set_time_limit(&mut self, seconds: f64) {
         self.0.set(param::TimeLimit, seconds).unwrap();
     }
-
-
 }
 
 impl LPModel<gurobi::Constr, gurobi::Var, GurobiEnv> for gurobi::Model {
     fn new(name: &str, env: &mut GurobiEnv) -> Self {
         gurobi::Model::new(name, &mut env.0).unwrap()
     }
-
-
 
     fn get_dual_list(&self, constrs: &[gurobi::Constr]) -> Vec<f64> {
         self.get_values(attr::Pi, constrs).unwrap()
