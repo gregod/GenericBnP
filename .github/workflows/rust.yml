@@ -1,0 +1,30 @@
+
+name: Cargo Build & Test
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+env: 
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_and_test:
+    name: Rust project - latest
+    runs-on: ubuntu-latest
+    env: 
+      NIXPKGS_ALLOW_UNFREE: 1 # required to get gurobi
+    strategy:
+      matrix:
+        toolchain:
+          - nightly
+    steps:
+      - uses: actions/checkout@v3
+      - uses: cachix/install-nix-action@v26
+        with:
+          nix_path: nixpkgs=channel:nixos-23.11
+      - run: nix-shell --run "rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}"
+      - run: nix-shell --run "cargo build --verbose"
+      # TODO: github runner is missing gurobi license required for tests
+      # - run: nix-shell --run "cargo test --verbose"
