@@ -1,4 +1,3 @@
-#![feature(int_roundings)]
 // Problem taken from:
 //  Desrosiers, Jacques & Lübbecke, Marco. (2006). A Primer in Column Generation. 10.1007/0-387-25486-2_1.
 

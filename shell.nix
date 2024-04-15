@@ -1,23 +1,15 @@
-
 with import <nixpkgs> {};
-let
- gurobi_fix = gurobi.override { python3 = python310; };
-
-in
-
 mkShell {
     buildInputs = [
-	gcc
+	      gcc
         llvmPackages.bintools
         pkg-config
-        gurobi_fix
-        rustup
-        xdot
-
+        gurobi
+        cargo
     ];
     allowUnfree = true; 
     shellHook = ''
-      export GUROBI_HOME="${gurobi_fix}"
+      export GUROBI_HOME="${gurobi}"
       export LD_LIBRARY_PATH="$GUROBI_HOME/lib"
     ''; 
 }

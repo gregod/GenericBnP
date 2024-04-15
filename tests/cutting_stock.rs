@@ -1,4 +1,3 @@
-#![feature(int_roundings)]
 // Problem adapted from https://www2.imm.dtu.dk/courses/02717/columngeneration/columngeneration.pdf
 
 #[cfg(test)]
@@ -355,7 +354,7 @@ mod tests {
             .map(|p| Column {
                 cuts: vec![PieceItem {
                     size: p.size,
-                    count: PieceCount(problem_instance.length_rod.div_floor(p.size.0)),
+                    count: PieceCount(problem_instance.length_rod / p.size.0),
                 }],
             })
             .for_each(|c| {
