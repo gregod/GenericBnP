@@ -9,7 +9,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-twox-hash = "1.6.3"
+twox-hash = "2.0.1"
 binary-heap-plus = "0.5.0"
 compare = "0.1.0"
 console = "0.15.7"
