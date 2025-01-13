@@ -19,7 +19,7 @@ nohash-hasher = "0.2.0"
 gurobi = { version = "0.3.4", optional = true}
 
 [dev-dependencies]
-petgraph = "0.6.4"
+petgraph = "0.7.1"
 
 [features]
 
